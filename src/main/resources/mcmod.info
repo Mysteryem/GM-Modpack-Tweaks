@@ -1,0 +1,16 @@
+[
+{
+  "modid": "gmpacktweaks",
+  "name": "GM Modpack Tweaks",
+  "description": "Tweaks to improve the overall polish of the GM Modpack, no balancing, I swear :>",
+  "version": "${version}",
+  "mcversion": "${mcversion}",
+  "url": "",
+  "updateUrl": "",
+  "authorList": ["Mysteryem"],
+  "credits": "Mysteryem",
+  "logoFile": "",
+  "screenshots": [],
+  "dependencies": []
+}
+]
