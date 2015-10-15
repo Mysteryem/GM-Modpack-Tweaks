@@ -112,7 +112,7 @@ public class UndergroundBiomesConstructs extends Tweak {
       if (!this.isModLoaded()) {
         return;
       }
-      MinecraftForge.EVENT_BUS.register(this);
+//      MinecraftForge.EVENT_BUS.register(this);
       String[] dictNames = new String[]{"Redstone", "Coal", "Diamond", "Lapis", "Emerald", "Gold", "Iron"};
       String[] blockPrefixes = new String[]{"igneous_ore", "metamorphic_ore", "sedimentary_ore"};
       int maxMeta = 7;
