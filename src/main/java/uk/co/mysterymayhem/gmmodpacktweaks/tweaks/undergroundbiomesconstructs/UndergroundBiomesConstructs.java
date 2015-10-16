@@ -27,6 +27,7 @@ import uk.co.mysterymayhem.gmmodpacktweaks.tweaks.Tweak;
 import uk.co.mysterymayhem.gmmodpacktweaks.util.OreDict;
 import static uk.co.mysterymayhem.gmmodpacktweaks.util.Misc.log;
 import cofh.asmhooks.event.ModPopulateChunkEvent;
+import cpw.mods.fml.common.Loader;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
@@ -57,6 +58,9 @@ public class UndergroundBiomesConstructs extends Tweak {
   private static final HashMap<NamedBlock, NamedBlock> brickMap = new HashMap<>();
   private static final HashMap<NamedBlock, NamedBlock> cobbleMap = new HashMap<>();
   private static final HashMap<NamedBlock, Block> monsterEggMap = new HashMap<>();
+  
+  // Needs WTFCaveBiomes
+  private static final HashMap<NamedBlock, Block> mossyCobbleMap = new HashMap<>();
 
   private static final HashMap<NamedBlock, Integer> nbtIndexMap = new HashMap<>();
 
@@ -275,6 +279,15 @@ public class UndergroundBiomesConstructs extends Tweak {
       monsterEggMap.put(UBIDs.igneousStoneName, GameRegistry.findBlock(MODID, "igneous_monsterStoneEgg"));
       monsterEggMap.put(UBIDs.metamorphicStoneName, GameRegistry.findBlock(MODID, "metamorphic_monsterStoneEgg"));
       monsterEggMap.put(UBIDs.sedimentaryStoneName, GameRegistry.findBlock(MODID, "sedimentary_monsterStoneEgg"));
+      
+      if (Loader.isModLoaded("CaveBiomes")) {
+        blockReplaceMethodLookup.put(Blocks.mossy_cobblestone, (UBStoneCodes strata, World world, int x, int y, int z) -> {
+        world.setBlock(x, y, z, mossyCobbleMap.get(strata.name), strata.metadata, 2);
+      });
+        mossyCobbleMap.put(UBIDs.igneousStoneName, GameRegistry.findBlock("CaveBiomes", "mossy_igneous_cobblestone"));
+        mossyCobbleMap.put(UBIDs.metamorphicStoneName, GameRegistry.findBlock("CaveBiomes", "mossy_metamorphic_cobblestone"));
+        mossyCobbleMap.put(UBIDs.sedimentaryStoneName, GameRegistry.findBlock("CaveBiomes", "mossy_sedimentary_stone"));
+      }
 
     } catch (NoSuchFieldException | SecurityException | IllegalArgumentException | IllegalAccessException ex) {
       uk.co.mysterymayhem.gmmodpacktweaks.util.Misc.log("Failed to get UBC OreUBifier");
