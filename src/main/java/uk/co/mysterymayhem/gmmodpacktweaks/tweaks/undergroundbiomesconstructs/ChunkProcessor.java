@@ -16,8 +16,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import net.minecraft.block.Block;
 import net.minecraft.world.World;
-import net.minecraft.world.chunk.Chunk;
-import uk.co.mysterymayhem.gmmodpacktweaks.util.Misc;
+import static uk.co.mysterymayhem.gmmodpacktweaks.util.Misc.log;
 
 /**
  *
@@ -35,6 +34,7 @@ class ChunkProcessor {
     }
     return get;
   }
+
   private final World world;
   private final UndergroundBiomesConstructs ubcTweak;
 
@@ -46,12 +46,12 @@ class ChunkProcessor {
   // To be called whenever a chunk is finished populating
   void postPopulate(ChunkRef populated) {
     Iterator<ChunkRef> iterator = populated.notifyOnPostPopulate.iterator();
-      while (iterator.hasNext()) {
-        ChunkRef toNotify = iterator.next();
-        // After notifying a particular chunk that we've been populated, we can forget all about needing to notify that chunk
-        iterator.remove();
-        notify(toNotify, populated);
-      }
+    while (iterator.hasNext()) {
+      ChunkRef toNotify = iterator.next();
+      // After notifying a particular chunk that we've been populated, we can forget all about needing to notify that chunk
+      iterator.remove();
+      notify(toNotify, populated);
+    }
 //    for (ChunkRef toNotify : decorated.notifyOnPostDecorate) {
 //      // Tell everyone who's interested that I've been populated
 //      notify(toNotify, decorated);
@@ -65,13 +65,14 @@ class ChunkProcessor {
         // Check if the chunk exists, if it does and the chunk is not decorated or if it doesn't exist, we must wait for it to become decorated
         // The order is important here, as checking if it's decorated will attempt to create the chunk if it doesn't exist, leading to an infinite loop
         if (!world.getChunkProvider().chunkExists(populated.x + x, populated.z + z) || !world.getChunkFromChunkCoords(populated.x + x, populated.z + z).isTerrainPopulated) {
-          
+
           // Not yet populated, or possible not even existant
           ChunkRef notYetPopulated = ChunkRef.get(populated.x + x, populated.z + z);
           // I'm waiting on this yet to be decorated chunk before I'll replace my blocks
           populated.waitingOn.add(notYetPopulated);
           // I want this chunk to tell me once it's decorated
           notYetPopulated.notifyOnPostPopulate.add(populated);
+          //log("Chunk at (" + populated.x + ", " + populated.z + ") is waiting for chunk at (" + (populated.x + x) + ", " + (populated.z + z) + ") to populate too");
         }
 //        Chunk chunk = world.getChunkFromChunkCoords(decorated.x + x, decorated.z + z);
 //        if (!chunk.isTerrainPopulated) {
@@ -87,6 +88,51 @@ class ChunkProcessor {
     replaceBlocksIfNotWaiting(populated);
   }
 
+  // To be called whenever a chunk is finished populating
+  void postModOreGen(ChunkRef fullyGenned) {
+    Iterator<ChunkRef> iterator = fullyGenned.notifyOnPostPopulate.iterator();
+    while (iterator.hasNext()) {
+      ChunkRef toNotify = iterator.next();
+      // After notifying a particular chunk that we've been populated, we can forget all about needing to notify that chunk
+      iterator.remove();
+      notify(toNotify, fullyGenned);
+    }
+//    for (ChunkRef toNotify : decorated.notifyOnPostDecorate) {
+//      // Tell everyone who's interested that I've been populated
+//      notify(toNotify, decorated);
+//    }
+    // We want to see if the surrounding chunks have been populated, if so, we replace the blocks in this chunk
+    for (int x = -1; x <= 1; x++) {
+      for (int z = -1; z <= 1; z++) {
+        if (x == 0 && z == 0) {
+          continue;
+        }
+        // Check if the chunk exists, if it does and the chunk is not decorated or if it doesn't exist, we must wait for it to become decorated
+        // The order is important here, as checking if it's decorated will attempt to create the chunk if it doesn't exist, leading to an infinite loop
+        if (!world.getChunkProvider().chunkExists(fullyGenned.x + x, fullyGenned.z + z) || !world.getChunkFromChunkCoords(fullyGenned.x + x, fullyGenned.z + z).isTerrainPopulated) {
+
+          // Not yet populated, or possible not even existant
+          ChunkRef notYetPopulated = ChunkRef.get(fullyGenned.x + x, fullyGenned.z + z);
+          // I'm waiting on this yet to be decorated chunk before I'll replace my blocks
+          fullyGenned.waitingOn.add(notYetPopulated);
+          // I want this chunk to tell me once it's decorated
+          notYetPopulated.notifyOnPostPopulate.add(fullyGenned);
+          //log("Chunk at (" + fullyGenned.x + ", " + fullyGenned.z + ") is waiting for chunk at (" + (fullyGenned.x + x) + ", " + (fullyGenned.z + z) + ") to populate too");
+        }
+//        Chunk chunk = world.getChunkFromChunkCoords(decorated.x + x, decorated.z + z);
+//        if (!chunk.isTerrainPopulated) {
+//          //
+//          ChunkRef notYetPopulated = ChunkRef.get(chunk);
+//          // I'm waiting on this yet to be decorated chunk before I'll replace my blocks
+//          decorated.waitingOn.add(notYetPopulated);
+//          // I want this chunk to tell me once it's decorated
+//          notYetPopulated.notifyOnPostDecorate.add(decorated);
+//        }
+      }
+    }
+    replaceBlocksIfNotWaiting(fullyGenned);
+  }
+
   private void notify(ChunkRef toNotify, ChunkRef justBeenPopulated) {
     //!!! Moved into the loop to prevent ConcurrentModificationExceptions
     // Clear out the chunks we need to notify when we've finished decorating
@@ -100,6 +146,7 @@ class ChunkProcessor {
   private void replaceBlocksIfNotWaiting(ChunkRef ref) {
     // If all the surrounding chunks have been populated
     if (ref.waitingOn.isEmpty()) {
+      //log("Replacing blocks for chunk at (" + ref.x + ", " + ref.z + ")");
       // We are free to replace the block in this chunk now
       replaceBlocks(ref);
       // This reference is no longer going to be used, so remove it from the map
@@ -115,9 +162,13 @@ class ChunkProcessor {
      */
   }
 
-  private void replaceBlocks(ChunkRef ref) {
-    int par_x = ref.x * 16;
-    int par_z = ref.z * 16;
+  void replaceBlocks(ChunkRef ref) {
+    replaceBlocks(ref.x, ref.z);
+  }
+
+  void replaceBlocks(int chunkX, int chunkZ) {
+    int par_x = chunkX * 16;
+    int par_z = chunkZ * 16;
     DimensionManager dimManager = (DimensionManager) UBAPIHook.ubAPIHook.ubSetProviderRegistry;
     WorldGenManager worldGen = dimManager.worldGenManager(0);
     //UBStoneCodes fillerCodes = worldGen.getUndergroundBiomeGenAt(event.chunkX, event.chunkZ).fillerBlockCodes;
@@ -142,7 +193,7 @@ class ChunkProcessor {
             try {
               blockChanger.changeBlock(strata, world, x, y, z);
             } catch (NullPointerException npe) {
-              Misc.log("NPE! Strata is " + strata.name.internal() + ", Block is " + currentBlock.getUnlocalizedName());
+              log("NPE! Strata is " + strata.name.internal() + ", Block is " + currentBlock.getUnlocalizedName());
               throw npe;
             }
           } else if (UndergroundBiomesConstructs.oreUBifier.replaces(currentBlock, metadata = world.getBlockMetadata(x, y, z))) {

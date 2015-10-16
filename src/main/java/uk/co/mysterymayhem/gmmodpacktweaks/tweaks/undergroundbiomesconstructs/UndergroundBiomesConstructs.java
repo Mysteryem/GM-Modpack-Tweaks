@@ -5,42 +5,38 @@
  */
 package uk.co.mysterymayhem.gmmodpacktweaks.tweaks.undergroundbiomesconstructs;
 
-import Zeno410Utils.BlockState;
 import cpw.mods.fml.common.event.FMLPostInitializationEvent;
 import cpw.mods.fml.common.eventhandler.EventPriority;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.registry.GameRegistry;
-import exterminatorJeff.undergroundBiomes.api.BiomeGenUndergroundBase;
 import exterminatorJeff.undergroundBiomes.api.NamedBlock;
-import exterminatorJeff.undergroundBiomes.api.NamedVanillaBlock;
-import exterminatorJeff.undergroundBiomes.api.UBAPIHook;
 import exterminatorJeff.undergroundBiomes.api.UBIDs;
 import exterminatorJeff.undergroundBiomes.api.UBStoneCodes;
-import exterminatorJeff.undergroundBiomes.common.DimensionManager;
 import exterminatorJeff.undergroundBiomes.worldGen.OreUBifier;
 import net.minecraft.block.Block;
 import net.minecraft.world.World;
-import net.minecraft.world.chunk.storage.ExtendedBlockStorage;
-import net.minecraftforge.event.terraingen.PopulateChunkEvent.Post;
-import net.minecraftforge.event.entity.player.PlayerInteractEvent;
+import net.minecraftforge.event.world.WorldEvent;
 import exterminatorJeff.undergroundBiomes.common.UndergroundBiomes;
-import exterminatorJeff.undergroundBiomes.common.WorldGenManager;
 import exterminatorJeff.undergroundBiomes.constructs.entity.UndergroundBiomesTileEntity;
 import java.lang.reflect.Field;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Objects;
 import net.minecraft.init.Blocks;
-import net.minecraft.init.Items;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.util.ChatComponentText;
-import net.minecraft.util.ChunkCoordinates;
-import net.minecraft.world.chunk.Chunk;
 import net.minecraftforge.common.MinecraftForge;
 import uk.co.mysterymayhem.gmmodpacktweaks.tweaks.Tweak;
 //import net.minecraftforge.event.terraingen.
 import uk.co.mysterymayhem.gmmodpacktweaks.util.OreDict;
 import static uk.co.mysterymayhem.gmmodpacktweaks.util.Misc.log;
+import cofh.asmhooks.event.ModPopulateChunkEvent;
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.ObjectInput;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutput;
+import java.io.ObjectOutputStream;
+import java.util.ArrayList;
 
 /**
  *
@@ -52,6 +48,8 @@ public class UndergroundBiomesConstructs extends Tweak {
   static OreUBifier oreUBifier;
 //  private final HashMap<Integer, Function<UBStoneCodes, BlockCodes>> blockIDToMethod = new HashMap<>();
   final static HashMap<Block, IBlockChanger> blockReplaceMethodLookup = new HashMap<>();
+
+  private static final String SAVE_LOCATION = "gmpacktweaks_chunksave";
 
   private static final HashMap<NamedBlock, NamedBlock> slabMap = new HashMap<>();
   private static final HashMap<NamedBlock, NamedBlock> slabFullMap = new HashMap<>();
@@ -103,7 +101,6 @@ public class UndergroundBiomesConstructs extends Tweak {
 
   public UndergroundBiomesConstructs() {
     this.MODID = "UndergroundBiomes";
-
   }
 
   @Override
@@ -112,7 +109,7 @@ public class UndergroundBiomesConstructs extends Tweak {
       if (!this.isModLoaded()) {
         return;
       }
-//      MinecraftForge.EVENT_BUS.register(this);
+      MinecraftForge.EVENT_BUS.register(this);
       String[] dictNames = new String[]{"Redstone", "Coal", "Diamond", "Lapis", "Emerald", "Gold", "Iron"};
       String[] blockPrefixes = new String[]{"igneous_ore", "metamorphic_ore", "sedimentary_ore"};
       int maxMeta = 7;
@@ -339,45 +336,94 @@ public class UndergroundBiomesConstructs extends Tweak {
    //int storageArraysPerThread = blockStorageArray.length / processors;
    //Block blockByExtId = blockStorageArray[0].getBlockByExtId(0, 0, 0);
    }*/
+//  @SubscribeEvent(priority = EventPriority.LOWEST)
+//  public void interactWithBlock(PlayerInteractEvent event) {
+//    try {
+//      if (event.action.equals(PlayerInteractEvent.Action.RIGHT_CLICK_BLOCK) && Items.stick.equals(event.entityPlayer.inventory.getCurrentItem().getItem())) {
+//        int metadata = event.world.getBlockMetadata(event.x, event.y, event.z);
+//        Block block = event.world.getBlock(event.x, event.y, event.z);
+//        event.entityPlayer.addChatComponentMessage(new ChatComponentText("Block is " + new ItemStack(block, 1, metadata).getDisplayName() + (metadata == 0 ? "" : ":" + metadata)));
+//        if (oreUBifier.replaces(block, metadata)) {
+//          event.entityPlayer.addChatComponentMessage(new ChatComponentText("OreUBifier says it's to be replaced"));
+//          Chunk chunk = event.world.getChunkFromBlockCoords(event.x, event.z);
+//          int par_x = chunk.xPosition * 16;
+//          int par_z = chunk.zPosition * 16;
+//          int x = event.x;
+//          int z = event.z;
+//
+//          DimensionManager dimManager = (DimensionManager) UBAPIHook.ubAPIHook.ubSetProviderRegistry;
+//          WorldGenManager worldGen = dimManager.worldGenManager(0);
+//          BiomeGenUndergroundBase[] undergroundBiomesForGeneration = new BiomeGenUndergroundBase[256];
+//          undergroundBiomesForGeneration = worldGen.loadUndergroundBlockGeneratorData(undergroundBiomesForGeneration, par_x, par_z, 16, 16);
+//          BiomeGenUndergroundBase currentBiome = undergroundBiomesForGeneration[(x - par_x) + (z - par_z) * 16];
+//          int variation = (int) (currentBiome.strataNoise.noise(x / 55.533, z / 55.533, 3, 1, 0.5) * 10 - 5);
+//          UBStoneCodes defaultColumnStone = currentBiome.fillerBlockCodes;
+//          UBStoneCodes baseStrata = currentBiome.getStrataBlockAtLayer(event.y + variation);
+//          BlockState replacement = oreUBifier.replacement(block, metadata, baseStrata, defaultColumnStone);
+//          event.entityPlayer.addChatComponentMessage(new ChatComponentText("Replacement is " + new ItemStack(replacement.block, 1, replacement.metadata).getDisplayName() + (replacement.metadata == 0 ? "" : ":" + replacement.metadata)));
+//        } else {
+//          event.entityPlayer.addChatComponentMessage(new ChatComponentText("OreUBifier says it isn't replaced"));
+//        }
+//      }
+//      else if (event.action.equals(PlayerInteractEvent.Action.RIGHT_CLICK_BLOCK) && Items.arrow.equals(event.entityPlayer.inventory.getCurrentItem().getItem())) {
+//        ChunkProcessor cProcessor = ChunkProcessor.get(event.world, this);
+//        cProcessor.replaceBlocks(ChunkRef.get(event.x >> 4, event.z >> 4));
+//      }
+//    } catch (NullPointerException npe) {
+//      //nope
+//    }
+//  }
+//  @SubscribeEvent(priority = EventPriority.LOWEST)
+//  public void postPopulate(Post event) {
+//    if (event.world.provider.dimensionId == 0) {
+//      ChunkProcessor cProcessor = ChunkProcessor.get(event.world, this);
+//      cProcessor.postPopulate(ChunkRef.get(event));
+//    }
+//  }
   @SubscribeEvent(priority = EventPriority.LOWEST)
-  public void interactWithBlock(PlayerInteractEvent event) {
-    try {
-      if (event.action.equals(PlayerInteractEvent.Action.RIGHT_CLICK_BLOCK) && Items.stick.equals(event.entityPlayer.inventory.getCurrentItem().getItem())) {
-        int metadata = event.world.getBlockMetadata(event.x, event.y, event.z);
-        Block block = event.world.getBlock(event.x, event.y, event.z);
-        event.entityPlayer.addChatComponentMessage(new ChatComponentText("Block is " + block.getUnlocalizedName() + (metadata == 0 ? "" : ":" + metadata)));
-        if (oreUBifier.replaces(block, metadata)) {
-          event.entityPlayer.addChatComponentMessage(new ChatComponentText("OreUBifier says it's to be replaced"));
-          Chunk chunk = event.world.getChunkFromBlockCoords(event.x, event.z);
-          int par_x = chunk.xPosition * 16;
-          int par_z = chunk.zPosition * 16;
-          int x = event.x;
-          int z = event.z;
-
-          DimensionManager dimManager = (DimensionManager) UBAPIHook.ubAPIHook.ubSetProviderRegistry;
-          WorldGenManager worldGen = dimManager.worldGenManager(0);
-          BiomeGenUndergroundBase[] undergroundBiomesForGeneration = new BiomeGenUndergroundBase[256];
-          undergroundBiomesForGeneration = worldGen.loadUndergroundBlockGeneratorData(undergroundBiomesForGeneration, par_x, par_z, 16, 16);
-          BiomeGenUndergroundBase currentBiome = undergroundBiomesForGeneration[(x - par_x) + (z - par_z) * 16];
-          int variation = (int) (currentBiome.strataNoise.noise(x / 55.533, z / 55.533, 3, 1, 0.5) * 10 - 5);
-          UBStoneCodes defaultColumnStone = currentBiome.fillerBlockCodes;
-          UBStoneCodes baseStrata = currentBiome.getStrataBlockAtLayer(event.y + variation);
-          BlockState replacement = oreUBifier.replacement(block, metadata, baseStrata, defaultColumnStone);
-          event.entityPlayer.addChatComponentMessage(new ChatComponentText("Replacement is " + replacement.block.getUnlocalizedName() + (replacement.metadata == 0 ? "" : ":" + replacement.metadata)));
-        } else {
-          event.entityPlayer.addChatComponentMessage(new ChatComponentText("OreUBifier says it isn't replaced"));
-        }
-      }
-    } catch (NullPointerException npe) {
-      //nope
+  public void postTerrainGenerate(ModPopulateChunkEvent.Post event) {
+    if (event.world.provider.dimensionId == 0) {
+      ChunkProcessor cProcessor = ChunkProcessor.get(event.world, this);
+      //cProcessor.replaceBlocks(ChunkRef.get(event.chunkX, event.chunkZ));
+      cProcessor.postModOreGen(ChunkRef.get(event.chunkX, event.chunkZ));
     }
   }
 
-  @SubscribeEvent(priority = EventPriority.LOWEST)
-  public void postPopulate(Post event) {
+//  @SubscribeEvent(priority = EventPriority.LOWEST)
+//  public void chunkLoadEvent(ChunkEvent.Load event) {
+//    if (event.world.provider.dimensionId == 0 && event.getChunk().isTerrainPopulated) {
+//      Chunk chunk = event.getChunk();
+//      ChunkRef.get(chunk.xPosition, chunk.zPosition).allGenFinished = true;
+//    }
+//  }
+//  public void onChunkUnload(ChunkEvent.Unload event) {
+//    // Store information on the chunks which are waiting, so they can re-check their status once loaded again.
+//    
+//    // Also, while we could save this information to file when the world unloads, what happens if we crash?
+//  }
+  @SubscribeEvent(priority = EventPriority.NORMAL)
+  public void onWorldUnload(WorldEvent.Unload event) {
     if (event.world.provider.dimensionId == 0) {
-      ChunkProcessor cProcessor = ChunkProcessor.get(event.world, this);
-      cProcessor.postPopulate(ChunkRef.get(event));
+      ArrayList<ChunkRef> toFile = ChunkRef.getAll();
+      try (ObjectOutput output = new ObjectOutputStream(new BufferedOutputStream(new FileOutputStream(SAVE_LOCATION)));) {
+        output.writeObject(toFile);
+        log("Wrote UBC data to file");
+      } catch (IOException ex) {
+        log(ex.getLocalizedMessage());
+      }
+    }
+  }
+
+  @SubscribeEvent(priority = EventPriority.NORMAL)
+  public void onWorldLoad(WorldEvent.Load event) {
+    if (event.world.provider.dimensionId == 0) {
+      try (ObjectInput input = new ObjectInputStream(new BufferedInputStream(new FileInputStream(SAVE_LOCATION)));) {
+        ArrayList<ChunkRef> fromFile = (ArrayList<ChunkRef>) input.readObject();
+        ChunkRef.setAll(fromFile);
+        log("Loaded UBC data from file");
+      } catch (IOException | ClassNotFoundException ex) {
+        log(ex.getLocalizedMessage());
+      }
     }
   }
 

@@ -42,7 +42,8 @@ public class GMModpackTweaks
             + ";after:rftools"
             + ";before:RotaryCraft"
             + ";before:UndergroundBiomes"
-            + ";after:fossil";
+            + ";after:fossil"
+            + ";required-after:CoFHCore";
 
     
     
