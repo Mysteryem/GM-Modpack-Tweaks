@@ -29,6 +29,7 @@ import static uk.co.mysterymayhem.gmmodpacktweaks.util.Misc.log;
 import cofh.asmhooks.event.ModPopulateChunkEvent;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -49,7 +50,7 @@ public class UndergroundBiomesConstructs extends Tweak {
 //  private final HashMap<Integer, Function<UBStoneCodes, BlockCodes>> blockIDToMethod = new HashMap<>();
   final static HashMap<Block, IBlockChanger> blockReplaceMethodLookup = new HashMap<>();
 
-  private static final String SAVE_LOCATION = "gmpacktweaks_chunksave";
+  private static final String SAVE_NAME = "gmpacktweaks_chunksaves";
 
   private static final HashMap<NamedBlock, NamedBlock> slabMap = new HashMap<>();
   private static final HashMap<NamedBlock, NamedBlock> slabFullMap = new HashMap<>();
@@ -405,11 +406,13 @@ public class UndergroundBiomesConstructs extends Tweak {
   public void onWorldUnload(WorldEvent.Unload event) {
     if (event.world.provider.dimensionId == 0) {
       ArrayList<ChunkRef> toFile = ChunkRef.getAll();
-      try (ObjectOutput output = new ObjectOutputStream(new BufferedOutputStream(new FileOutputStream(SAVE_LOCATION)));) {
+      try (ObjectOutput output = new ObjectOutputStream(new BufferedOutputStream(new FileOutputStream(event.world.getSaveHandler().getWorldDirectory().getAbsolutePath() + File.separator + SAVE_NAME)));) {
         output.writeObject(toFile);
         log("Wrote UBC data to file");
       } catch (IOException ex) {
-        log(ex.getLocalizedMessage());
+        log(ex.toString());
+      } catch (NullPointerException npe) {
+        //Fail silently
       }
     }
   }
@@ -417,12 +420,14 @@ public class UndergroundBiomesConstructs extends Tweak {
   @SubscribeEvent(priority = EventPriority.NORMAL)
   public void onWorldLoad(WorldEvent.Load event) {
     if (event.world.provider.dimensionId == 0) {
-      try (ObjectInput input = new ObjectInputStream(new BufferedInputStream(new FileInputStream(SAVE_LOCATION)));) {
+      try (ObjectInput input = new ObjectInputStream(new BufferedInputStream(new FileInputStream(event.world.getSaveHandler().getWorldDirectory().getAbsolutePath() + File.separator + SAVE_NAME)));) {
         ArrayList<ChunkRef> fromFile = (ArrayList<ChunkRef>) input.readObject();
         ChunkRef.setAll(fromFile);
         log("Loaded UBC data from file");
       } catch (IOException | ClassNotFoundException ex) {
-        log(ex.getLocalizedMessage());
+        log(ex.toString());
+      } catch (NullPointerException npe) {
+        //Fail silently
       }
     }
   }
