@@ -365,11 +365,11 @@ public class UndergroundBiomesConstructs extends Tweak {
       monsterEggMap.put(UBIDs.igneousStoneName, Objects.requireNonNull(GameRegistry.findBlock(MODID, "igneous_monsterStoneEgg")));
       monsterEggMap.put(UBIDs.metamorphicStoneName, Objects.requireNonNull(GameRegistry.findBlock(MODID, "metamorphic_monsterStoneEgg")));
       monsterEggMap.put(UBIDs.sedimentaryStoneName, Objects.requireNonNull(GameRegistry.findBlock(MODID, "sedimentary_monsterStoneEgg")));
-      brickMonsterEggMap.put(UBIDs.igneousStoneBrickName, igneousBrickMonsterEgg);
-      brickMonsterEggMap.put(UBIDs.metamorphicStoneBrickName, metamorphicBrickMonsterEgg);
+      brickMonsterEggMap.put(UBIDs.igneousStoneName, igneousBrickMonsterEgg);
+      brickMonsterEggMap.put(UBIDs.metamorphicStoneName, metamorphicBrickMonsterEgg);
       brickMonsterEggMap.put(UBIDs.sedimentaryStoneName, Objects.requireNonNull(GameRegistry.findBlock(MODID, "sedimentary_monsterStoneEgg")));
-      cobbleMonsterEggMap.put(UBIDs.igneousCobblestoneName, igneousCobbleMonsterEgg);
-      cobbleMonsterEggMap.put(UBIDs.metamorphicCobblestoneName, metamorphicCobbleMonsterEgg);
+      cobbleMonsterEggMap.put(UBIDs.igneousStoneName, igneousCobbleMonsterEgg);
+      cobbleMonsterEggMap.put(UBIDs.metamorphicStoneName, metamorphicCobbleMonsterEgg);
       cobbleMonsterEggMap.put(UBIDs.sedimentaryStoneName, Objects.requireNonNull(GameRegistry.findBlock(MODID, "sedimentary_monsterStoneEgg")));
 
       monsterEggBlocks.put(Blocks.monster_egg, m -> BlockSilverfish.func_150197_b(m));
@@ -388,11 +388,11 @@ public class UndergroundBiomesConstructs extends Tweak {
       silverfishHideLookup.put(Blocks.cobblestone, m -> cobblestoneMonsterEgg);
       silverfishHideLookup.put(Blocks.stonebrick, m -> new ImmutablePair<>(Blocks.monster_egg, m + 2));
       silverfishHideLookup.put(UBIDs.igneousStoneName.block(), m -> new ImmutablePair<>(monsterEggMap.get(UBIDs.igneousStoneName), m));
-      silverfishHideLookup.put(UBIDs.igneousCobblestoneName.block(), m -> new ImmutablePair<>(cobbleMonsterEggMap.get(UBIDs.igneousCobblestoneName), m));
-      silverfishHideLookup.put(UBIDs.igneousStoneBrickName.block(), m -> new ImmutablePair<>(brickMonsterEggMap.get(UBIDs.igneousStoneBrickName), m));
+      silverfishHideLookup.put(UBIDs.igneousCobblestoneName.block(), m -> new ImmutablePair<>(cobbleMonsterEggMap.get(UBIDs.igneousStoneName), m));
+      silverfishHideLookup.put(UBIDs.igneousStoneBrickName.block(), m -> new ImmutablePair<>(brickMonsterEggMap.get(UBIDs.igneousStoneName), m));
       silverfishHideLookup.put(UBIDs.metamorphicStoneName.block(), m -> new ImmutablePair<>(monsterEggMap.get(UBIDs.metamorphicStoneName), m));
-      silverfishHideLookup.put(UBIDs.metamorphicCobblestoneName.block(), m -> new ImmutablePair<>(cobbleMonsterEggMap.get(UBIDs.metamorphicCobblestoneName), m));
-      silverfishHideLookup.put(UBIDs.metamorphicStoneBrickName.block(), m -> new ImmutablePair<>(brickMonsterEggMap.get(UBIDs.metamorphicStoneBrickName), m));
+      silverfishHideLookup.put(UBIDs.metamorphicCobblestoneName.block(), m -> new ImmutablePair<>(cobbleMonsterEggMap.get(UBIDs.metamorphicStoneName), m));
+      silverfishHideLookup.put(UBIDs.metamorphicStoneBrickName.block(), m -> new ImmutablePair<>(brickMonsterEggMap.get(UBIDs.metamorphicStoneName), m));
       silverfishHideLookup.put(UBIDs.sedimentaryStoneName.block(), m -> new ImmutablePair<>(monsterEggMap.get(UBIDs.sedimentaryStoneName), m));
 
       if (Loader.isModLoaded("CaveBiomes")) {
