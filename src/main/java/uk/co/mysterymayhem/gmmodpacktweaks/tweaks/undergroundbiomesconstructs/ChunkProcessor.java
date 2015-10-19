@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import net.minecraft.block.Block;
 import net.minecraft.world.World;
+import uk.co.mysterymayhem.gmmodpacktweaks.util.Log;
 
 /**
  * The heart of the Underground Biomes Constructs tweak. Responsible for noting the requests to replace the blocks in specified chunks with UBC versions, performing the replacements when possible.
@@ -88,7 +89,9 @@ class ChunkProcessor {
         }
         // Check if the chunk exists, if it does and the chunk is not decorated or if it doesn't exist, we must wait for it to become decorated
         // The order is important here, as checking if it's decorated will attempt to create the chunk if it doesn't exist, leading to an infinite loop
-        if (!world.getChunkProvider().chunkExists(fullyGenned.x + xOffset, fullyGenned.z + zOffset) || !world.getChunkFromChunkCoords(fullyGenned.x + xOffset, fullyGenned.z + zOffset).isTerrainPopulated) {
+        if (!world.getChunkProvider().chunkExists(fullyGenned.x + xOffset, fullyGenned.z + zOffset) 
+                || !world.getChunkFromChunkCoords(fullyGenned.x + xOffset, fullyGenned.z + zOffset).isTerrainPopulated 
+                || ChunkRef.isCurrentlyPopulating(fullyGenned.x + xOffset, fullyGenned.z + zOffset)) {
 
           // Not yet populated, or possible not even existant
           ChunkRef notYetPopulated = ChunkRef.get(fullyGenned.x + xOffset, fullyGenned.z + zOffset);
@@ -99,7 +102,7 @@ class ChunkProcessor {
           notYetPopulated.notifyOnPostPopulate.add(fullyGenned);
 
           //DEBUG
-          //log("Chunk at (" + fullyGenned.x + ", " + fullyGenned.z + ") is waiting for chunk at (" + (fullyGenned.x + x) + ", " + (fullyGenned.z + z) + ") to populate too");
+          //Log.log(fullyGenned + " is waiting on " + notYetPopulated);
         }
       }
     }
@@ -116,6 +119,10 @@ class ChunkProcessor {
   private void notify(ChunkRef toNotify, ChunkRef justBeenPopulated) {
     // Notify the chunk by telling it that it's not waiting for us any more
     toNotify.waitingOn.remove(justBeenPopulated);
+    
+    //DEBUG
+    //Log.log(justBeenPopulated + " is notifying " + toNotify);
+    
     // Check if that means it can have its blocks replaced now and do so if it can
     replaceBlocksIfNotWaiting(toNotify);
   }
@@ -129,7 +136,16 @@ class ChunkProcessor {
   private void replaceBlocksIfNotWaiting(ChunkRef ref) {
     // If all the surrounding chunks have been populated
     if (ref.waitingOn.isEmpty()) {
-      //log("Replacing blocks for chunk at (" + ref.x + ", " + ref.z + ")");
+      //TODO: Fix the problem in postModOreGen when a chunk can have isTerrainPopulated = false, even when that chunk has been passed to postModOreGen beforehand. isTerrainPopulated sometimes set after postModOreGen? Need to investigate. 
+      //TODO: NOPE, isTerrainPopulated is set to true _before_ vanilla population. Mod population then happens after that, with postModOreGen occuring as the last thing during mod population. I really don't know what's causing this, but it is fortunately recoverable. The more important question is whether or not the whole process can produce cycles (chunk a waiting on chunk b, which is waiting on chunk a) or forgotten chunks (chunk c has had its ores populated, is waiting on no chunks, but has not
+      for (ChunkRef brokenNotify : ref.notifyOnPostPopulate) {
+        Log.error("Somehow " + brokenNotify + " made it into " + ref + "'s notify list late");
+        notify(brokenNotify, ref);
+      }
+      
+      //DEBUG
+      //Log.log("Replacing blocks for " + ref);
+      
       // We are free to replace the block in this chunk now
       replaceBlocks(ref);
       // This reference is no longer going to be used, so remove it from the map

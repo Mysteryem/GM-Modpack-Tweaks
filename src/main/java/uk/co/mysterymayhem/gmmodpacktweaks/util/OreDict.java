@@ -11,7 +11,7 @@ import net.minecraft.block.Block;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraftforge.oredict.OreDictionary;
-import static uk.co.mysterymayhem.gmmodpacktweaks.util.Misc.log;
+import static uk.co.mysterymayhem.gmmodpacktweaks.util.Log.log;
 
 /**
  *

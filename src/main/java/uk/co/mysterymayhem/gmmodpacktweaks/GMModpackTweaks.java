@@ -6,6 +6,7 @@ import cpw.mods.fml.common.event.FMLInitializationEvent;
 import cpw.mods.fml.common.event.FMLPostInitializationEvent;
 import cpw.mods.fml.common.event.FMLPreInitializationEvent;
 import java.util.HashSet;
+import uk.co.mysterymayhem.gmmodpacktweaks.tweaks.CaveBiomes;
 import uk.co.mysterymayhem.gmmodpacktweaks.tweaks.FossilsAndArcheology;
 import uk.co.mysterymayhem.gmmodpacktweaks.tweaks.GalacticraftMorePlanets;
 import uk.co.mysterymayhem.gmmodpacktweaks.tweaks.JaffasAndMore;
@@ -64,6 +65,7 @@ public class GMModpackTweaks
       tweaks.add(new FossilsAndArcheology());
       tweaks.add(new UBCOres());
       tweaks.add(new UndergroundBiomesConstructs());
+      tweaks.add(new CaveBiomes());
     }
     
     @EventHandler

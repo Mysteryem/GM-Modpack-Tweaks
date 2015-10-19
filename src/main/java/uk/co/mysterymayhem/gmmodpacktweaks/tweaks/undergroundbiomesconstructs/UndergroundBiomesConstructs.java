@@ -11,8 +11,6 @@ import exterminatorJeff.undergroundBiomes.worldGen.OreUBifier;
 import net.minecraft.block.Block;
 import net.minecraft.world.World;
 import net.minecraftforge.event.world.WorldEvent;
-import net.minecraftforge.event.entity.living.LivingHurtEvent;
-import net.minecraftforge.event.entity.living.LivingSetAttackTargetEvent;
 import exterminatorJeff.undergroundBiomes.common.UndergroundBiomes;
 import exterminatorJeff.undergroundBiomes.constructs.entity.UndergroundBiomesTileEntity;
 import java.lang.reflect.Field;
@@ -21,7 +19,7 @@ import net.minecraft.init.Blocks;
 import net.minecraftforge.common.MinecraftForge;
 import uk.co.mysterymayhem.gmmodpacktweaks.tweaks.Tweak;
 import uk.co.mysterymayhem.gmmodpacktweaks.util.OreDict;
-import static uk.co.mysterymayhem.gmmodpacktweaks.util.Misc.log;
+import static uk.co.mysterymayhem.gmmodpacktweaks.util.Log.log;
 import cofh.asmhooks.event.ModPopulateChunkEvent;
 import cpw.mods.fml.common.Loader;
 import cpw.mods.fml.relauncher.ReflectionHelper;
@@ -36,23 +34,21 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.ListIterator;
 import java.util.Objects;
 import java.util.logging.Level;
-import java.util.logging.Logger;
 import java.util.regex.Pattern;
 import net.minecraft.block.BlockSilverfish;
 import net.minecraft.entity.monster.EntitySilverfish;
 import net.minecraft.util.MathHelper;
 import org.apache.commons.lang3.tuple.ImmutablePair;
-import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 import net.minecraft.util.Facing;
 import net.minecraftforge.event.entity.living.LivingEvent;
-import java.util.function.BiFunction;
 import java.util.function.Function;
+import net.minecraftforge.event.terraingen.PopulateChunkEvent;
+import uk.co.mysterymayhem.gmmodpacktweaks.util.Log;
 
 /**
  * Mod tweaks for Underground Biomes Constructs.
@@ -405,17 +401,36 @@ public class UndergroundBiomesConstructs extends Tweak {
       }
 
     } catch (NoSuchFieldException | SecurityException | IllegalArgumentException | IllegalAccessException ex) {
-      uk.co.mysterymayhem.gmmodpacktweaks.util.Misc.log("Failed to get UBC OreUBifier");
+      uk.co.mysterymayhem.gmmodpacktweaks.util.Log.log("Failed to get UBC OreUBifier");
     }
 
+  }
+  /**
+   * Order of events in ChunkProviderServer.populate(...) : chunk.isTerrainPopulate := true, PopulateChunkEvent.Pre->Post, ModPopulateChunkEvent.Pre->Post.
+   * We can safely create the ChunkRef as we know at this point that it is yet to have its blocks replaced or any of its ores generated.
+   * @see net.minecraft.world.gen.ChunkProviderServer#populate(IChunkProvider, int, int) ChunkProviderServer.populate
+   * @param event  
+   */
+  public void vanillaPopulationStarting(PopulateChunkEvent.Pre event) {
+    if (!event.world.isRemote) {
+      ChunkRef.get(event.chunkX, event.chunkZ).setCurrentlyPopulating();
+    }
   }
 
   @SubscribeEvent(priority = EventPriority.LOWEST)
   public void postTerrainGenerate(ModPopulateChunkEvent.Post event) {
     if (!event.world.isRemote && event.world.provider.dimensionId == 0) {
+      ChunkRef chunkRef = ChunkRef.get(event.chunkX, event.chunkZ);
+      
+      // Extra tracking of chunk status, this is the point when chunk.isTerrainPopulated equalling true is actually correct
+      chunkRef.setFinishedPopulating();
+      
       ChunkProcessor cProcessor = ChunkProcessor.get(event.world);
       //cProcessor.replaceBlocks(ChunkRef.get(event.chunkX, event.chunkZ));
-      cProcessor.postModOreGen(ChunkRef.get(event.chunkX, event.chunkZ));
+      cProcessor.postModOreGen(chunkRef);
+      
+      //DEBUG
+      //log("Finished postModOreGen for (" + event.chunkX + ", " + event.chunkZ + ")");
     }
   }
 
@@ -423,18 +438,22 @@ public class UndergroundBiomesConstructs extends Tweak {
   private static final String SECTION_DELIM = "\n";
   private static final String LIST_ENTRY_DELIM = ";";
 
-  @SubscribeEvent(priority = EventPriority.NORMAL)
+  @SubscribeEvent(priority = EventPriority.LOWEST)
   public void onWorldUnload(WorldEvent.Unload event) {
     if (!event.world.isRemote && event.world.provider.dimensionId == 0) {
       log("Beginning write to file attempt");
+      
+      ChunkRef.validateAll();
+      ChunkRef.cyclicCheck();
+      
       ArrayList<ChunkRef> allRefsList = ChunkRef.getAll();
-      //DEBUG
-      //ChunkRef.cyclicCheck();
+      
       try (PrintWriter output = new PrintWriter(new BufferedWriter(new FileWriter(event.world.getSaveHandler().getWorldDirectory().getAbsolutePath() + File.separator + SAVE_NAME)));) {
 
-        StringBuilder stringOutput = new StringBuilder();
+//        StringBuilder stringOutput = new StringBuilder();
         HashMap<ChunkRef, Integer> reverseLookup = new HashMap<>();
 
+        StringBuilder referencesBuilder = new StringBuilder();
         // Write non-list information for each ChunkRef
         for (ListIterator<ChunkRef> iterator = allRefsList.listIterator(); iterator.hasNext();) {
           ChunkRef next = iterator.next();
@@ -443,57 +462,69 @@ public class UndergroundBiomesConstructs extends Tweak {
           reverseLookup.put(next, iterator.previousIndex());
 
           // Nothing appended when allGenFinished is false as that should be the majority of the time
-          stringOutput.append(next.x).append(DATUM_DELIM).append(next.z);//.append(DATUM_DELIM).append(next.allGenFinished ? ALL_GEN_FINISHED : "");
+          referencesBuilder.append(next.x).append(DATUM_DELIM).append(next.z);//.append(DATUM_DELIM).append(next.allGenFinished ? ALL_GEN_FINISHED : "");
 
           if (iterator.hasNext()) {
-            stringOutput.append(LIST_ENTRY_DELIM);
+            referencesBuilder.append(LIST_ENTRY_DELIM);
           }
         }
 
         // New line for next section
-        stringOutput.append(SECTION_DELIM);
+//        referencesBuilder.append(SECTION_DELIM);
 
+        StringBuilder notifyBuilder = new StringBuilder();
         // notifyOnPostPopulate section
         for (ListIterator<ChunkRef> iterator = allRefsList.listIterator(); iterator.hasNext();) {
           ChunkRef next = iterator.next();
 
           for (Iterator<ChunkRef> postPopulateIterator = next.notifyOnPostPopulate.iterator(); postPopulateIterator.hasNext();) {
             ChunkRef postPopNext = postPopulateIterator.next();
-            stringOutput.append(reverseLookup.get(postPopNext));
+            notifyBuilder.append(reverseLookup.get(postPopNext));
 
             if (postPopulateIterator.hasNext()) {
-              stringOutput.append(DATUM_DELIM);
+              notifyBuilder.append(DATUM_DELIM);
             }
           }
 
           if (iterator.hasNext()) {
-            stringOutput.append(LIST_ENTRY_DELIM);
+            notifyBuilder.append(LIST_ENTRY_DELIM);
           }
         }
 
-        // New line for next section
-        stringOutput.append(SECTION_DELIM);
+//        // New line for next section
+//        stringOutput.append(SECTION_DELIM);
 
+        StringBuilder waitingBuilder = new StringBuilder();
+        
         // waitingOn section
         for (ListIterator<ChunkRef> iterator = allRefsList.listIterator(); iterator.hasNext();) {
           ChunkRef next = iterator.next();
 
           for (Iterator<ChunkRef> waitingOnIterator = next.waitingOn.iterator(); waitingOnIterator.hasNext();) {
             ChunkRef waitingOnNext = waitingOnIterator.next();
-            stringOutput.append(reverseLookup.get(waitingOnNext));
+            Integer get = reverseLookup.get(waitingOnNext);
+            if (get == null) {
+              Log.error("Failed to get reference to ChunkRef " + waitingOnNext + " which " + next + " is waiting on");
+              continue;
+            }
+            waitingBuilder.append(get);
 
             if (waitingOnIterator.hasNext()) {
-              stringOutput.append(DATUM_DELIM);
+              waitingBuilder.append(DATUM_DELIM);
             }
           }
 
           if (iterator.hasNext()) {
-            stringOutput.append(LIST_ENTRY_DELIM);
+            waitingBuilder.append(LIST_ENTRY_DELIM);
           }
         }
+        
+        String outputString = referencesBuilder.append(SECTION_DELIM).append(notifyBuilder).append(SECTION_DELIM).append(waitingBuilder).toString();
 
-        output.write(stringOutput.toString());
+        output.write(outputString);
+        
         log("Wrote UBC data to file");
+        ChunkRef.validateAll();
       } catch (IOException /*| NullPointerException*/ ex) {
         log("Failed to save UBC file:\n" + String.valueOf(ex));
       }
@@ -512,7 +543,7 @@ public class UndergroundBiomesConstructs extends Tweak {
         });
         String[] sections = wholeFile.toString().split(Pattern.quote(SECTION_DELIM));
         if (sections.length != 3) {
-          log("UBC data could not be read, does the file exist?");
+          log("UBC data could not be read, invalid number of sections");
           return;
         }
 

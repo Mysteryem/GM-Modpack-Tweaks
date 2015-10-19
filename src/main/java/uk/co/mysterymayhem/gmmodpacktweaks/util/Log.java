@@ -13,8 +13,13 @@ import static uk.co.mysterymayhem.gmmodpacktweaks.GMModpackTweaks.MODID;
  *
  * @author Thomas
  */
-public class Misc {
-  public static void log(String message) {
-      FMLLog.log(MODID, Level.INFO, message);
-    }
+public class Log {
+
+  public static void log(Object o) {
+    FMLLog.log(MODID, Level.INFO, String.valueOf(o));
+  }
+
+  public static void error(Object o) {
+    FMLLog.log(MODID, Level.ERROR, "Error: " + String.valueOf(o));
+  }
 }

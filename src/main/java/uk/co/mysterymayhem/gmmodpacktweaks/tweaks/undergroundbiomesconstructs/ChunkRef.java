@@ -6,7 +6,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraftforge.event.terraingen.PopulateChunkEvent;
-import static uk.co.mysterymayhem.gmmodpacktweaks.util.Misc.log;
+import uk.co.mysterymayhem.gmmodpacktweaks.util.Log;
 
 /**
  * Allows access to and stores chunks by referencing their x and y coordinates.
@@ -18,6 +18,8 @@ public class ChunkRef {
 
   // Internal map for storing ChunkRefs
   private static final HashMap<Integer, HashMap<Integer, ChunkRef>> allRefs = new HashMap<>();
+  
+  private static final HashSet<ChunkRef> currentlyGenerating = new HashSet<>();
 
   /**
    * Get a ChunkRef, creating a new one if it doesn't yet exist.
@@ -216,12 +218,74 @@ public class ChunkRef {
         for (ChunkRef ref3 : ref2.waitingOn) {
           if (ref == ref3) {
             thereIsAnError = true;
-            log(ref.toString() + " and " + ref2.toString() + " are waiting for each other before their blocks will be replaced");
+            Log.error(ref.toString() + " and " + ref2.toString() + " are waiting for each other before their blocks will be replaced");
           }
         }
       }
     }
     return thereIsAnError;
+  }
+  
+  public static boolean validateAll() {
+    boolean valid = true;
+    for (ChunkRef ref : ChunkRef.getAll()) {
+      boolean validateWaiting = ChunkRef.validateWaiting(ref);
+      boolean validateNotify = ChunkRef.validateNotify(ref);
+      if (!validateWaiting || !validateNotify) {
+        valid = false;
+      }
+    }
+    return valid;
+  }
+  
+  public static boolean validateWaiting(ChunkRef ref) {
+    boolean valid = true;
+    for (ChunkRef waitingOn : ref.waitingOn) {
+      if (!waitingOn.notifyOnPostPopulate.contains(ref)) {
+        valid = false;
+        Log.error("!!!!! " + ref + " is waiting on " + waitingOn + ", but " + waitingOn + " isn't going to notify " + ref + "!");
+      }
+    }
+    return valid;
+  }
+  
+  public static boolean validateNotify(ChunkRef ref) {
+    boolean valid = true;
+    for (ChunkRef toNotify : ref.notifyOnPostPopulate) {
+      if (!toNotify.waitingOn.contains(ref)) {
+        valid = false;
+        Log.error(ref + " is going to notify " + toNotify + ", but " + toNotify + " isn't waiting on " + ref + "!");
+      }
+    }
+    return valid;
+  }
+  
+  public static boolean validateEmpty(ChunkRef ref) {
+    if (ref.notifyOnPostPopulate.isEmpty() && ref.waitingOn.isEmpty()) {
+      Log.error(ref + " isn't waiting on any other chunk, nor is it going to notify any others!");
+      return false;
+    }
+    return true;
+  }
+  
+  public void setCurrentlyPopulating() {
+    currentlyGenerating.add(this);
+  }
+  
+  public void setFinishedPopulating() {
+    currentlyGenerating.remove(this);
+  }
+  
+  public static boolean isCurrentlyPopulating(int chunkX, int chunkZ) {
+    return chunkRefExists(chunkX, chunkZ) && currentlyGenerating.contains(new ChunkRef(chunkX, chunkZ));
+  }
+  
+  public static boolean chunkRefExists(int chunkX, int chunkZ) {
+    HashMap<Integer, ChunkRef> get = allRefs.get(chunkX);
+    if (get == null) {
+      return false;
+    }
+    return get.get(chunkZ) != null;
   }
 
 }
