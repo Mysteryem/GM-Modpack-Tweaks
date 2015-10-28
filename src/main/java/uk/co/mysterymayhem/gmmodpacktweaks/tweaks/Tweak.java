@@ -16,7 +16,11 @@ import cpw.mods.fml.common.event.FMLPostInitializationEvent;
  */
 public abstract class Tweak {
   
-  protected String MODID = "";
+  protected final String MODID;
+  
+  protected Tweak(String str) {
+    this.MODID = str;
+  }
 
   public void init(FMLInitializationEvent event) {}
   public void preInit(FMLPreInitializationEvent event) {}

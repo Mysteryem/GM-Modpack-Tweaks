@@ -23,28 +23,16 @@ import net.minecraftforge.oredict.OreDictionary;
  * @author Thomas
  */
 public class GalacticraftMorePlanets extends Tweak{
+  
+  public GalacticraftMorePlanets() {
+    super(null);
+  }
 
   @Override
   public boolean isModLoaded() {
     return Loader.isModLoaded("GalacticraftCore") && Loader.isModLoaded("GalacticraftMars") && Loader.isModLoaded("MorePlanet");
   }
-  
-//  private boolean seenFirstMeteoricIronRegister = false;
-//  
-//  @SubscribeEvent
-//  public void oreRegister(OreDictionary.OreRegisterEvent event) {
-//    switch(event.Name) {
-//      case "ingotMeteoricIron":
-//        if (!seenFirstMeteoricIronRegister)
-//          event.
-//        break;
-//        
-//      default:
-//        break;
-//    }
-//  }*/
-  
-  
+   
   @Override
   public void init(FMLInitializationEvent event) {
     if (!this.isModLoaded()) return;
@@ -98,13 +86,14 @@ public class GalacticraftMorePlanets extends Tweak{
       regMany("PurpleCrystal", MP, new String[]{POB, POI, POB}, new int[]{9,1,11}, ORE, GEM, BLOCK);
       regMany("IchoriusGem", MP, new String[]{NIB, "power_crystal", NIB}, new int[]{4,0,9}, ORE, GEM, BLOCK);
       regMany("Norium", MP, new String[]{NIB, NII, NIB}, new int[]{5,1,10}, ORE, INGOT, BLOCK);
-      register(ORE, "Diamond", MP, NIB, 6);
+      regMany("Diamond", MP, new String[]{NIB, SIB}, new int[]{6,5}, ORE);
       regMany("Coal", MP, new String[]{NIB, FRB, VEB}, new int[]{7,3,8}, ORE);
       regMany("RedGem", MP, new String[]{NIB, NII, NIB}, new int[]{8,0,11}, ORE, GEM, BLOCK);
       regMany("WhiteCrystal", MP, new String[]{KOB, KOI, KOB}, new int[]{6,0,9}, ORE, GEM, BLOCK);
       regMany("EMPCrystal", MP, new String[]{KOB, KOI, KOB}, new int[]{7,1,10}, ORE, GEM, BLOCK);
       regMany("BacterialFossil", MP, new String[]{KOB, KOI}, new int[]{8,2}, ORE, ITEM);
       regMany("Iron", MP, new String[]{POB, FRB, MEB, VEB, PLB, PHB, DEB}, new int[]{6,2,7,9,6,6,6}, ORE);
+      register(DUST, "Iron", GM, "item.itemBasicAsteroids", 4);
       register(ORE, "Lapis", MP, FRB, 7);
       regMany("MineralCrystal", MP, new String[]{FRB, FRI}, new int[]{8,0}, ORE, GEM);
       regMany("BlackDiamond", MP, new String[]{FRB, FRI, FROB}, new int[]{9,2,1}, ORE, GEM, BLOCK);
@@ -130,7 +119,7 @@ public class GalacticraftMorePlanets extends Tweak{
       regMany("Xeonium", MP, new String[]{PLB, PLI, "xeonium_dust"}, new int[]{7,0,0}, ORE, GEM, DUST);
       regMany("Desh", GM, new String[]{"tile.mars", "item.null", "item.null", "tile.mars"}, new int[]{2,0,2,8}, ORE, DUST, INGOT, BLOCK);
       regMany("Desh", MP, new String[]{PHB, DEB}, new int[]{7,7}, ORE);
-      register(ORE, "Titanium", GM, "tile.asteroidsBlock", 4);
+      regMany("Titanium", GM, new String[]{"tile.asteroidsBlock", "item.itemBasicAsteroids"}, new int[]{4,4}, ORE, DUST);
       regMany("Metallic", MP, new String[]{"metallic_rock", MEI, MEI}, new int[]{0,0,2}, ORE, DUST, INGOT);
       regMany("PolongniusMeteoricIron", MP, new String[]{POB, POI, POI}, new int[]{10,4,2}, BLOCK, INGOT, DUST);
       regMany("KoentusMeteoricIron", MP, new String[]{KOB, KOI, KOI}, new int[]{15,4,3}, BLOCK, INGOT, DUST);

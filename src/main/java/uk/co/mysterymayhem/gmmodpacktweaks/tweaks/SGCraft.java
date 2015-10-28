@@ -15,7 +15,7 @@ import uk.co.mysterymayhem.gmmodpacktweaks.util.OreDict;
 public class SGCraft extends Tweak{
 
   public SGCraft() {
-    this.MODID = "SGCraft";
+    super("SGCraft");
   }
   
 

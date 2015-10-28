@@ -4,6 +4,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.world.ChunkCoordIntPair;
+import net.minecraft.world.World;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraftforge.event.terraingen.PopulateChunkEvent;
 import uk.co.mysterymayhem.gmmodpacktweaks.util.Log;
@@ -15,11 +18,15 @@ import uk.co.mysterymayhem.gmmodpacktweaks.util.Log;
  * @author Mysteryem
  */
 public class ChunkRef {
+  
+  public static final String WAITING_ON_KEY = "MWaitList";
+  public static final String NOTIFY_KEY = "MNoteList";
 
   // Internal map for storing ChunkRefs
   private static final HashMap<Integer, HashMap<Integer, ChunkRef>> allRefs = new HashMap<>();
   
   private static final HashSet<ChunkRef> currentlyGenerating = new HashSet<>();
+  private static final HashSet<ChunkRef> currentlyUnloading = new HashSet<>();
 
   /**
    * Get a ChunkRef, creating a new one if it doesn't yet exist.
@@ -51,6 +58,44 @@ public class ChunkRef {
    */
   public static ChunkRef get(Chunk chunk) {
     return get(chunk.xPosition, chunk.zPosition);
+  }
+  
+  public static ChunkRef get(ChunkCoordIntPair pair) {
+    return get(pair.chunkXPos, pair.chunkZPos);
+  }
+  
+  public static ChunkRef getIfExists(ChunkCoordIntPair pair) {
+    return getIfExists(pair.chunkXPos, pair.chunkZPos);
+  }
+  
+  /**
+   * Get a chunk only if it exists
+   * @param chunk
+   * @return The ChunkRef or null if it doesn't exist
+   */
+  public static ChunkRef getIfExists(Chunk chunk) {
+    return getIfExists(chunk.xPosition, chunk.zPosition);
+  }
+  /**
+   * Get a chunk only if it exists
+   * @param chunkX
+   * @param chunkZ
+   * @return The ChunkRef or null if it doesn't exist
+   */
+  public static ChunkRef getIfExists(int chunkX, int chunkZ) {
+    HashMap<Integer, ChunkRef> get = allRefs.get(chunkX);
+    if (get == null) {
+      return null;
+    }
+    else {
+      ChunkRef ref = get.get(chunkZ);
+      if (ref == null) {
+        return null;
+      }
+      else {
+        return ref;
+      }
+    }
   }
 
   /**
@@ -146,8 +191,9 @@ public class ChunkRef {
 
   public final int x;
   public final int z;
-  final HashSet<ChunkRef> waitingOn = new HashSet<>();
-  final HashSet<ChunkRef> notifyOnPostPopulate = new HashSet<>();
+  final HashSet<ChunkCoordIntPair> waitingOn = new HashSet<>();
+  final HashSet<ChunkCoordIntPair> notifyOnPostPopulate = new HashSet<>();
+  //private final ChunkCoordIntPair
 
   private ChunkRef(int chunkX, int chunkZ) {
     this.x = chunkX;
@@ -197,11 +243,11 @@ public class ChunkRef {
   public String toFullString() {
     StringBuilder builder = new StringBuilder();
     builder.append(this).append("waiting on: ");
-    for (ChunkRef ref : this.waitingOn) {
+    for (ChunkCoordIntPair ref : this.waitingOn) {
       builder.append(ref).append(", ");
     }
     builder.append("to notify: ");
-    for (ChunkRef ref : this.notifyOnPostPopulate) {
+    for (ChunkCoordIntPair ref : this.notifyOnPostPopulate) {
       builder.append(ref).append(", ");
     }
     return builder.toString();
@@ -210,15 +256,19 @@ public class ChunkRef {
   /**
    * Check for any cyclic dependencies between ChunkRefs.
    * This may take a while as it checks every single ChunkRef, then looks through every ChunkRef it's waiting on and then checks if any of those are waiting on it.
+   * @return 
    */
   public static boolean cyclicCheck() {
     boolean thereIsAnError = false;
     for (ChunkRef ref : getAll()) {
-      for (ChunkRef ref2 : ref.waitingOn) {
-        for (ChunkRef ref3 : ref2.waitingOn) {
+      for (ChunkCoordIntPair pair2 : ref.waitingOn) {
+        ChunkRef ref2 = ChunkRef.getIfExists(pair2);
+        if (ref2 == null) {continue;}
+        for (ChunkCoordIntPair pair3 : ref2.waitingOn) {
+          ChunkRef ref3 = ChunkRef.getIfExists(pair3);
           if (ref == ref3) {
             thereIsAnError = true;
-            Log.error(ref.toString() + " and " + ref2.toString() + " are waiting for each other before their blocks will be replaced");
+            Log.error(ref.toString() + " and " + ref2 + " are waiting for each other before their blocks will be replaced");
           }
         }
       }
@@ -240,8 +290,9 @@ public class ChunkRef {
   
   public static boolean validateWaiting(ChunkRef ref) {
     boolean valid = true;
-    for (ChunkRef waitingOn : ref.waitingOn) {
-      if (!waitingOn.notifyOnPostPopulate.contains(ref)) {
+    for (ChunkCoordIntPair waitingOnPair : ref.waitingOn) {
+      ChunkRef waitingOn = ChunkRef.getIfExists(waitingOnPair);
+      if (waitingOn != null && !waitingOn.notifyOnPostPopulate.contains(ref.toIntPair())) {
         valid = false;
         Log.error("!!!!! " + ref + " is waiting on " + waitingOn + ", but " + waitingOn + " isn't going to notify " + ref + "!");
       }
@@ -251,8 +302,9 @@ public class ChunkRef {
   
   public static boolean validateNotify(ChunkRef ref) {
     boolean valid = true;
-    for (ChunkRef toNotify : ref.notifyOnPostPopulate) {
-      if (!toNotify.waitingOn.contains(ref)) {
+    for (ChunkCoordIntPair toNotifyPair : ref.notifyOnPostPopulate) {
+      ChunkRef toNotify = ChunkRef.getIfExists(toNotifyPair);
+      if (toNotify != null && !toNotify.waitingOn.contains(ref.toIntPair())) {
         valid = false;
         Log.error(ref + " is going to notify " + toNotify + ", but " + toNotify + " isn't waiting on " + ref + "!");
       }
@@ -286,6 +338,68 @@ public class ChunkRef {
       return false;
     }
     return get.get(chunkZ) != null;
+  }
+  
+  public void saveToChunkData(NBTTagCompound nbt) {
+    // If any data exists already, we can safely replace it all as the ChunkRefs contain the most up to date data.
+    int[] notifyList = new int[this.notifyOnPostPopulate.size() * 2];
+    int index = 0;
+    for (ChunkCoordIntPair otherPair : this.notifyOnPostPopulate) {
+      notifyList[index++] = otherPair.chunkXPos;
+      notifyList[index++] = otherPair.chunkZPos;
+    }
+    if (notifyList.length != 0) {
+      nbt.setIntArray(NOTIFY_KEY, notifyList);
+    }
+    else {
+      nbt.removeTag(NOTIFY_KEY);
+    }
+    
+    int[] waitingOnList = new int[this.waitingOn.size() * 2];
+    index = 0;
+    for (ChunkCoordIntPair otherPair : this.waitingOn) {
+      waitingOnList[index++] = otherPair.chunkXPos;
+      waitingOnList[index++] = otherPair.chunkZPos;
+    }
+    if (waitingOnList.length != 0) {
+      nbt.setIntArray(WAITING_ON_KEY, waitingOnList);
+    }
+    else {
+      nbt.removeTag(WAITING_ON_KEY);
+    }
+       
+    ChunkRef.remove(this);
+    //DEBUG
+    Log.log("Removed " + this + " as data is beign saved to chunk " + nbt);
+  }
+  
+  public void loadFromChunkData(NBTTagCompound nbt, World world) {
+    // Important to merge loaded data with any existing data.
+    // Another chunk could have loaded and decided it's waiting on this chunk while this chunk wasn't loaded
+    int[] notifyList = nbt.getIntArray(NOTIFY_KEY);
+    if (notifyList != null) {
+      for (int i = 0; i < notifyList.length; i += 2) {
+        this.notifyOnPostPopulate.add(ChunkRef.get(notifyList[i], notifyList[i + 1]).toIntPair());
+      }
+    }
+    
+    HashSet<ChunkRef> waitingCopy = (HashSet<ChunkRef>)this.waitingOn.clone();
+       
+    int[] waitingList = nbt.getIntArray(WAITING_ON_KEY);
+    if (waitingList != null) {
+      for (int i = 0; i < waitingList.length; i += 2) {
+        this.waitingOn.add(ChunkRef.get(waitingList[i], waitingList[i + 1]).toIntPair());
+      }
+    }
+    this.waitingOn.removeAll(waitingCopy);
+    // Replace on next tick to avoid chunks that haven't fully loaded
+    ChunkProcessor.get(world).replaceBlocksIfNotWaitingNextTick(this);
+    Log.debug("Loaded " + this + " from nbt " + nbt);
+    Log.debug("WaitingOn list is now " + this.waitingOn);
+  }
+  
+  public ChunkCoordIntPair toIntPair() {
+    return new ChunkCoordIntPair(x, z);
   }
 
 }

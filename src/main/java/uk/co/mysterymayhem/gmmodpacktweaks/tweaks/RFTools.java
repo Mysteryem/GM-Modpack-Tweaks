@@ -16,7 +16,7 @@ import uk.co.mysterymayhem.gmmodpacktweaks.util.OreDict;
 public class RFTools extends Tweak {
 
   public RFTools() {
-    this.MODID = "rftools";
+    super("rftools");
   }
   
 

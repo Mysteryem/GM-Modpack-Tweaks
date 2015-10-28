@@ -22,4 +22,8 @@ public class Log {
   public static void error(Object o) {
     FMLLog.log(MODID, Level.ERROR, "Error: " + String.valueOf(o));
   }
+  
+  public static void debug(Object o) {
+    log("DEBUG " + o);
+  }
 }

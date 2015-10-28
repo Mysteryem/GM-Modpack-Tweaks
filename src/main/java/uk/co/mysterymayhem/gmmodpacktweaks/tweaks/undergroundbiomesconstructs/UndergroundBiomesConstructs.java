@@ -1,5 +1,6 @@
 package uk.co.mysterymayhem.gmmodpacktweaks.tweaks.undergroundbiomesconstructs;
 
+import Zeno410Utils.BlockState;
 import cpw.mods.fml.common.event.FMLPostInitializationEvent;
 import cpw.mods.fml.common.eventhandler.EventPriority;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
@@ -22,7 +23,12 @@ import uk.co.mysterymayhem.gmmodpacktweaks.util.OreDict;
 import static uk.co.mysterymayhem.gmmodpacktweaks.util.Log.log;
 import cofh.asmhooks.event.ModPopulateChunkEvent;
 import cpw.mods.fml.common.Loader;
+import cpw.mods.fml.common.gameevent.TickEvent;
 import cpw.mods.fml.relauncher.ReflectionHelper;
+import exterminatorJeff.undergroundBiomes.api.BiomeGenUndergroundBase;
+import exterminatorJeff.undergroundBiomes.api.UBAPIHook;
+import exterminatorJeff.undergroundBiomes.common.DimensionManager;
+import exterminatorJeff.undergroundBiomes.common.WorldGenManager;
 import exterminatorJeff.undergroundBiomes.common.block.BlockOverlay;
 import exterminatorJeff.undergroundBiomes.common.block.BlockUBHidden;
 import exterminatorJeff.undergroundBiomes.common.item.ItemUBHiddenBlock;
@@ -47,8 +53,22 @@ import java.util.concurrent.ThreadLocalRandom;
 import net.minecraft.util.Facing;
 import net.minecraftforge.event.entity.living.LivingEvent;
 import java.util.function.Function;
+import micdoodle8.mods.galacticraft.core.dimension.OrbitSpinSaveData;
+import net.minecraft.init.Items;
+import net.minecraft.item.ItemStack;
+import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.util.ChatComponentText;
+import net.minecraft.world.WorldSavedData;
+import net.minecraft.world.chunk.Chunk;
+import net.minecraft.world.chunk.IChunkProvider;
+import net.minecraft.world.gen.ChunkProviderServer;
+import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.event.terraingen.PopulateChunkEvent;
+import net.minecraftforge.event.world.ChunkDataEvent;
+import net.minecraftforge.event.world.ChunkEvent;
 import uk.co.mysterymayhem.gmmodpacktweaks.util.Log;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 
 /**
  * Mod tweaks for Underground Biomes Constructs.
@@ -134,7 +154,7 @@ public class UndergroundBiomesConstructs extends Tweak {
    * Create a UBC tweaks object. You should never need more than one of these.
    */
   public UndergroundBiomesConstructs() {
-    this.MODID = "UndergroundBiomes";
+    super("UndergroundBiomes");
   }
 
   /**
@@ -430,177 +450,271 @@ public class UndergroundBiomesConstructs extends Tweak {
       cProcessor.postModOreGen(chunkRef);
       
       //DEBUG
-      //log("Finished postModOreGen for (" + event.chunkX + ", " + event.chunkZ + ")");
+      log("Finished postModOreGen for " + chunkRef);
     }
   }
 
-  private static final String DATUM_DELIM = ",";
-  private static final String SECTION_DELIM = "\n";
-  private static final String LIST_ENTRY_DELIM = ";";
+//  private static final String DATUM_DELIM = ",";
+//  private static final String SECTION_DELIM = "\n";
+//  private static final String LIST_ENTRY_DELIM = ";";
 
   @SubscribeEvent(priority = EventPriority.LOWEST)
   public void onWorldUnload(WorldEvent.Unload event) {
     if (!event.world.isRemote && event.world.provider.dimensionId == 0) {
-      log("Beginning write to file attempt");
+      log("World unloading, saving all nbt data");
       
       ChunkRef.validateAll();
       ChunkRef.cyclicCheck();
       
-      ArrayList<ChunkRef> allRefsList = ChunkRef.getAll();
+      ArrayList<ChunkRef> allRefs = ChunkRef.getAll();
       
-      try (PrintWriter output = new PrintWriter(new BufferedWriter(new FileWriter(event.world.getSaveHandler().getWorldDirectory().getAbsolutePath() + File.separator + SAVE_NAME)));) {
-
-//        StringBuilder stringOutput = new StringBuilder();
-        HashMap<ChunkRef, Integer> reverseLookup = new HashMap<>();
-
-        StringBuilder referencesBuilder = new StringBuilder();
-        // Write non-list information for each ChunkRef
-        for (ListIterator<ChunkRef> iterator = allRefsList.listIterator(); iterator.hasNext();) {
-          ChunkRef next = iterator.next();
-
-          // Add to reverse lookup
-          reverseLookup.put(next, iterator.previousIndex());
-
-          // Nothing appended when allGenFinished is false as that should be the majority of the time
-          referencesBuilder.append(next.x).append(DATUM_DELIM).append(next.z);//.append(DATUM_DELIM).append(next.allGenFinished ? ALL_GEN_FINISHED : "");
-
-          if (iterator.hasNext()) {
-            referencesBuilder.append(LIST_ENTRY_DELIM);
-          }
+      ArrayList<ChunkRef> refsOfNonExistantChunks = new ArrayList<>();
+      
+      //For the remaining stored references to chunks that actually exist, we should be able to load the chunks so that when they unload, their data gets saved to their nbt. For chunks that we have reference to, but don't exist yet, we need to store the data separately, either flatfile or WorldSavedData or whatever it was
+      IChunkProvider chunkProvider = event.world.getChunkProvider();
+      for (ChunkRef ref : allRefs) {
+        if (chunkProvider.chunkExists(ref.x, ref.z)) {
+          //same as doing event.world.getChunkFromChunkCoords(ref.x, ref.z);
+          chunkProvider.provideChunk(ref.x, ref.z);
+        } else {
+          refsOfNonExistantChunks.add(ref);
         }
-
-        // New line for next section
-//        referencesBuilder.append(SECTION_DELIM);
-
-        StringBuilder notifyBuilder = new StringBuilder();
-        // notifyOnPostPopulate section
-        for (ListIterator<ChunkRef> iterator = allRefsList.listIterator(); iterator.hasNext();) {
-          ChunkRef next = iterator.next();
-
-          for (Iterator<ChunkRef> postPopulateIterator = next.notifyOnPostPopulate.iterator(); postPopulateIterator.hasNext();) {
-            ChunkRef postPopNext = postPopulateIterator.next();
-            notifyBuilder.append(reverseLookup.get(postPopNext));
-
-            if (postPopulateIterator.hasNext()) {
-              notifyBuilder.append(DATUM_DELIM);
-            }
-          }
-
-          if (iterator.hasNext()) {
-            notifyBuilder.append(LIST_ENTRY_DELIM);
-          }
-        }
-
-//        // New line for next section
-//        stringOutput.append(SECTION_DELIM);
-
-        StringBuilder waitingBuilder = new StringBuilder();
-        
-        // waitingOn section
-        for (ListIterator<ChunkRef> iterator = allRefsList.listIterator(); iterator.hasNext();) {
-          ChunkRef next = iterator.next();
-
-          for (Iterator<ChunkRef> waitingOnIterator = next.waitingOn.iterator(); waitingOnIterator.hasNext();) {
-            ChunkRef waitingOnNext = waitingOnIterator.next();
-            Integer get = reverseLookup.get(waitingOnNext);
-            if (get == null) {
-              Log.error("Failed to get reference to ChunkRef " + waitingOnNext + " which " + next + " is waiting on");
-              continue;
-            }
-            waitingBuilder.append(get);
-
-            if (waitingOnIterator.hasNext()) {
-              waitingBuilder.append(DATUM_DELIM);
-            }
-          }
-
-          if (iterator.hasNext()) {
-            waitingBuilder.append(LIST_ENTRY_DELIM);
-          }
-        }
-        
-        String outputString = referencesBuilder.append(SECTION_DELIM).append(notifyBuilder).append(SECTION_DELIM).append(waitingBuilder).toString();
-
-        output.write(outputString);
-        
-        log("Wrote UBC data to file");
-        ChunkRef.validateAll();
-      } catch (IOException /*| NullPointerException*/ ex) {
-        log("Failed to save UBC file:\n" + String.valueOf(ex));
       }
+      
+      OphanedChunkRefData ophanedChunkRefData = new OphanedChunkRefData();
+      ophanedChunkRefData.setData(refsOfNonExistantChunks);
+      event.world.perWorldStorage.setData(OphanedChunkRefData.UNIQUE_IDENTIFIER, ophanedChunkRefData);
+      event.world.perWorldStorage.saveAllData();
+      log("All nbt data saved");
+      
+//      try (PrintWriter output = new PrintWriter(new BufferedWriter(new FileWriter(event.world.getSaveHandler().getWorldDirectory().getAbsolutePath() + File.separator + SAVE_NAME)));) {
+//
+////        StringBuilder stringOutput = new StringBuilder();
+//        HashMap<ChunkRef, Integer> reverseLookup = new HashMap<>();
+//
+//        StringBuilder referencesBuilder = new StringBuilder();
+//        // Write non-list information for each ChunkRef
+//        for (ListIterator<ChunkRef> iterator = refsOfNonExistantChunks.listIterator(); iterator.hasNext();) {
+//          ChunkRef next = iterator.next();
+//
+//          // Add to reverse lookup
+//          reverseLookup.put(next, iterator.previousIndex());
+//
+//          // Nothing appended when allGenFinished is false as that should be the majority of the time
+//          referencesBuilder.append(next.x).append(DATUM_DELIM).append(next.z);//.append(DATUM_DELIM).append(next.allGenFinished ? ALL_GEN_FINISHED : "");
+//
+//          if (iterator.hasNext()) {
+//            referencesBuilder.append(LIST_ENTRY_DELIM);
+//          }
+//        }
+//
+//        // New line for next section
+////        referencesBuilder.append(SECTION_DELIM);
+//
+//        StringBuilder notifyBuilder = new StringBuilder();
+//        // notifyOnPostPopulate section
+//        for (ListIterator<ChunkRef> iterator = refsOfNonExistantChunks.listIterator(); iterator.hasNext();) {
+//          ChunkRef next = iterator.next();
+//
+//          for (Iterator<ChunkRef> postPopulateIterator = next.notifyOnPostPopulate.iterator(); postPopulateIterator.hasNext();) {
+//            ChunkRef postPopNext = postPopulateIterator.next();
+//            notifyBuilder.append(reverseLookup.get(postPopNext));
+//
+//            if (postPopulateIterator.hasNext()) {
+//              notifyBuilder.append(DATUM_DELIM);
+//            }
+//          }
+//
+//          if (iterator.hasNext()) {
+//            notifyBuilder.append(LIST_ENTRY_DELIM);
+//          }
+//        }
+//
+////        // New line for next section
+////        stringOutput.append(SECTION_DELIM);
+//
+//        StringBuilder waitingBuilder = new StringBuilder();
+//        
+//        // waitingOn section
+//        for (ListIterator<ChunkRef> iterator = refsOfNonExistantChunks.listIterator(); iterator.hasNext();) {
+//          ChunkRef next = iterator.next();
+//
+//          for (Iterator<ChunkRef> waitingOnIterator = next.waitingOn.iterator(); waitingOnIterator.hasNext();) {
+//            ChunkRef waitingOnNext = waitingOnIterator.next();
+//            Integer get = reverseLookup.get(waitingOnNext);
+//            if (get == null) {
+//              Log.error("Failed to get reference to ChunkRef " + waitingOnNext + " which " + next + " is waiting on");
+//              continue;
+//            }
+//            waitingBuilder.append(get);
+//
+//            if (waitingOnIterator.hasNext()) {
+//              waitingBuilder.append(DATUM_DELIM);
+//            }
+//          }
+//
+//          if (iterator.hasNext()) {
+//            waitingBuilder.append(LIST_ENTRY_DELIM);
+//          }
+//        }
+//        
+//        String outputString = referencesBuilder.append(SECTION_DELIM).append(notifyBuilder).append(SECTION_DELIM).append(waitingBuilder).toString();
+//
+//        output.write(outputString);
+//        
+//        log("Wrote UBC data to file");
+//        ChunkRef.validateAll();
+//      } catch (IOException /*| NullPointerException*/ ex) {
+//        log("Failed to save UBC file:\n" + String.valueOf(ex));
+//      }
     }
   }
 
   @SubscribeEvent(priority = EventPriority.NORMAL)
   public void onWorldLoad(WorldEvent.Load event) {
     if (!event.world.isRemote && event.world.provider.dimensionId == 0) {
-      log("Beginning load from file attempt");
-      try (BufferedReader input = new BufferedReader(new FileReader(event.world.getSaveHandler().getWorldDirectory().getAbsolutePath() + File.separator + SAVE_NAME));) {
-        StringBuilder wholeFile = new StringBuilder();
-        input.lines().forEach(t -> {
-          wholeFile.append(t);
-          wholeFile.append("\n");
-        });
-        String[] sections = wholeFile.toString().split(Pattern.quote(SECTION_DELIM));
-        if (sections.length != 3) {
-          log("UBC data could not be read, invalid number of sections");
-          return;
-        }
-
-        // Split the first section into individual ChunkRefs
-        String[] singlets = sections[0].split(Pattern.quote(LIST_ENTRY_DELIM));
-
-        // NOTE: Could use HashMap<String, ChunkRef>, then we don't need to parse at all, we could even store the references to ChunkRefs using letters or even control characters
-        ArrayList<ChunkRef> refList = new ArrayList<>(singlets.length);
-        for (String refAsString : singlets) {
-          String[] data = refAsString.split(Pattern.quote(DATUM_DELIM));
-          ChunkRef ref = ChunkRef.get(Integer.parseInt(data[0]), Integer.parseInt(data[1]));
-
-          refList.add(ref);
-        }
-
-        // Split the second section into individual lists of references to chunks.
-        String[] notifyList = sections[1].split(Pattern.quote(LIST_ENTRY_DELIM));
-
-        // For each list, split this into ChunkRef references, the index is the reference to the ChunkRef to which the data belongs
-        for (int i = 0; i < notifyList.length; i++) {
-          // If we have LIST_ENTRY_DELIM followed directly by LIST_ENTRY_DELIM, then we'll have an empty string, splitting using DATUM_DELIM will give that empty string again
-          if (notifyList[i].length() == 0) {
-            continue;
-          }
-
-          ChunkRef owningChunkRef = refList.get(i);
-          String[] referencesToChunkRefsAsStrings = notifyList[i].split(Pattern.quote(DATUM_DELIM));
-          for (String referenceToChunkRefAsString : referencesToChunkRefsAsStrings) {
-            owningChunkRef.notifyOnPostPopulate.add(refList.get(Integer.parseInt(referenceToChunkRefAsString)));
-          }
-        }
-
-        // Split the second section into individual lists of references to chunks.
-        String[] waitingList = sections[2].split(Pattern.quote(LIST_ENTRY_DELIM));
-
-        // For each list, split this into ChunkRef references, the index is the reference to the ChunkRef to which the data belongs
-        for (int i = 0; i < waitingList.length; i++) {
-          // If we have LIST_ENTRY_DELIM followed directly by LIST_ENTRY_DELIM, then we'll have an empty string, splitting using DATUM_DELIM will give that empty string again
-          if (waitingList[i].length() == 0) {
-            continue;
-          }
-
-          ChunkRef owningChunkRef = refList.get(i);
-          String[] referencesToChunkRefsAsStrings = waitingList[i].split(Pattern.quote(DATUM_DELIM));
-          for (String referenceToChunkRefAsString : referencesToChunkRefsAsStrings) {
-            owningChunkRef.waitingOn.add(refList.get(Integer.parseInt(referenceToChunkRefAsString)));
-          }
-        }
-
-        log("Loaded UBC data from file");
-      } catch (IOException /*| NullPointerException*/ | ArrayIndexOutOfBoundsException | NumberFormatException ex) {
-        // Clean up any partially stored data
-        ChunkRef.removeAll();
-        log("Failed to read UBC file:\n" + String.valueOf(ex));
+      Log.log("Loading world");
+      WorldSavedData loadedData = event.world.perWorldStorage.loadData(OphanedChunkRefData.class, OphanedChunkRefData.UNIQUE_IDENTIFIER);
+      if (loadedData == null) {
+        Log.log("No data loaded from world");
+      }
+//      log("Beginning load from file attempt");
+//      try (BufferedReader input = new BufferedReader(new FileReader(event.world.getSaveHandler().getWorldDirectory().getAbsolutePath() + File.separator + SAVE_NAME));) {
+//        StringBuilder wholeFile = new StringBuilder();
+//        input.lines().forEach(t -> {
+//          wholeFile.append(t);
+//          wholeFile.append("\n");
+//        });
+//        String[] sections = wholeFile.toString().split(Pattern.quote(SECTION_DELIM));
+//        if (sections.length != 3) {
+//          log("UBC data could not be read, invalid number of sections");
+//          return;
+//        }
+//
+//        // Split the first section into individual ChunkRefs
+//        String[] singlets = sections[0].split(Pattern.quote(LIST_ENTRY_DELIM));
+//
+//        // NOTE: Could use HashMap<String, ChunkRef>, then we don't need to parse at all, we could even store the references to ChunkRefs using letters or even control characters
+//        ArrayList<ChunkRef> refList = new ArrayList<>(singlets.length);
+//        for (String refAsString : singlets) {
+//          String[] data = refAsString.split(Pattern.quote(DATUM_DELIM));
+//          ChunkRef ref = ChunkRef.get(Integer.parseInt(data[0]), Integer.parseInt(data[1]));
+//
+//          refList.add(ref);
+//        }
+//
+//        // Split the second section into individual lists of references to chunks.
+//        String[] notifyList = sections[1].split(Pattern.quote(LIST_ENTRY_DELIM));
+//
+//        // For each list, split this into ChunkRef references, the index is the reference to the ChunkRef to which the data belongs
+//        for (int i = 0; i < notifyList.length; i++) {
+//          // If we have LIST_ENTRY_DELIM followed directly by LIST_ENTRY_DELIM, then we'll have an empty string, splitting using DATUM_DELIM will give that empty string again
+//          if (notifyList[i].length() == 0) {
+//            continue;
+//          }
+//
+//          ChunkRef owningChunkRef = refList.get(i);
+//          String[] referencesToChunkRefsAsStrings = notifyList[i].split(Pattern.quote(DATUM_DELIM));
+//          for (String referenceToChunkRefAsString : referencesToChunkRefsAsStrings) {
+//            owningChunkRef.notifyOnPostPopulate.add(refList.get(Integer.parseInt(referenceToChunkRefAsString)));
+//          }
+//        }
+//
+//        // Split the second section into individual lists of references to chunks.
+//        String[] waitingList = sections[2].split(Pattern.quote(LIST_ENTRY_DELIM));
+//
+//        // For each list, split this into ChunkRef references, the index is the reference to the ChunkRef to which the data belongs
+//        for (int i = 0; i < waitingList.length; i++) {
+//          // If we have LIST_ENTRY_DELIM followed directly by LIST_ENTRY_DELIM, then we'll have an empty string, splitting using DATUM_DELIM will give that empty string again
+//          if (waitingList[i].length() == 0) {
+//            continue;
+//          }
+//
+//          ChunkRef owningChunkRef = refList.get(i);
+//          String[] referencesToChunkRefsAsStrings = waitingList[i].split(Pattern.quote(DATUM_DELIM));
+//          for (String referenceToChunkRefAsString : referencesToChunkRefsAsStrings) {
+//            owningChunkRef.waitingOn.add(refList.get(Integer.parseInt(referenceToChunkRefAsString)));
+//          }
+//        }
+//
+//        log("Loaded UBC data from file");
+//      } catch (IOException /*| NullPointerException*/ | ArrayIndexOutOfBoundsException | NumberFormatException ex) {
+//        // Clean up any partially stored data
+//        ChunkRef.removeAll();
+//        log("Failed to read UBC file:\n" + String.valueOf(ex));
+//      }
+    }
+  }
+  
+  @SubscribeEvent
+  public void onChunkLoadFromFile(ChunkDataEvent.Load event) {
+    // Server worlds only
+    if (!event.world.isRemote) {
+      // Get NBT
+      NBTTagCompound data = event.getData();
+      
+      // Don't need to check for the NOTIFY key as if NOTIFY is non-empty, then 
+      // WAITING must also be non-empty
+      if (data.hasKey(ChunkRef.WAITING_ON_KEY) || data.hasKey(ChunkRef.NOTIFY_KEY)) {
+        // Chunk is yet to have its blocks replaced so we need to track this chunk still
+        // get/create a ChunkRef
+        ChunkRef ref = ChunkRef.get(event.getChunk());
+        // Load the data from the chunk into the ref
+        ref.loadFromChunkData(data, event.world);
+        
+        //DEBUG
+        Log.debug("Loaded " + ref + " from NBT");
+      }
+      else {
+        Log.debug("Loaded (" + event.getChunk().xPosition + ", " + event.getChunk().zPosition + "), with no extra nbt data: " + event.getData());
       }
     }
   }
+  
+  @SubscribeEvent
+  public void onChunkSaveToFile(ChunkDataEvent.Save event) {
+    if (!event.world.isRemote) {
+//      if (!causedByUnload(new Throwable())) {
+//        return;
+//      }
+      Chunk chunk = event.getChunk();
+      ChunkRef ref = ChunkRef.getIfExists(chunk);
+      if (ref != null) {
+        ref.saveToChunkData(event.getData());
+        Log.debug("Saved " + ref + " to NBT");
+        //Log.debug(ExceptionUtils.getStackTrace(new Throwable()));
+      }
+      else {
+        Log.debug("Chunk (" + chunk.xPosition + ", " + chunk.zPosition + ") was saved to file without UBC NBT: " + event.getData());
+        //Log.debug(ExceptionUtils.getStackTrace(new Throwable()));
+      }
+    }
+  }
+  
+//  @SubscribeEvent
+//  public void onChunkUnload(ChunkEvent.Unload event) {
+//    if (!event.world.isRemote) {
+//      ChunkRef ref = ChunkRef.getIfExists(event.getChunk());
+//      if (ref != null) {
+//        ref.setUnloading(true);
+//        Log.log("" + ref + " (ref) is unloading");
+//      }
+//      else {
+//        Chunk chunk = event.getChunk();
+//        Log.log("(" + chunk.xPosition + ", " + chunk.zPosition + ") (chunk) is unloading");
+//      }
+//    }
+//  }
+  
+//  private static boolean causedByUnload(Throwable t) {
+//    for (StackTraceElement ste : t.getStackTrace()) {
+//      String methodName = ste.getMethodName();
+//      if (methodName.equals("func_73156_b") || methodName.equals("unloadQueuedChunks")) {
+//        return true;
+//      }
+//    }
+//    return false;
+//  }
 
   /**
    * Allows silverfish to work with UBC stones, seems a little
@@ -673,6 +787,44 @@ public class UndergroundBiomesConstructs extends Tweak {
           throw new RuntimeException(ex);//Logger.getLogger(UndergroundBiomesConstructs.class.getName()).log(Level.SEVERE, null, ex);
         }
       }
+    }
+  }
+  
+  @SubscribeEvent(priority = EventPriority.LOWEST)
+  public void interactWithBlock(PlayerInteractEvent event) {
+    try {
+      if (event.action.equals(PlayerInteractEvent.Action.RIGHT_CLICK_BLOCK) && Items.stick.equals(event.entityPlayer.inventory.getCurrentItem().getItem())) {
+        int metadata = event.world.getBlockMetadata(event.x, event.y, event.z);
+        Block block = event.world.getBlock(event.x, event.y, event.z);
+        event.entityPlayer.addChatComponentMessage(new ChatComponentText("Block is " + new ItemStack(block, 1, metadata).getDisplayName() + (metadata == 0 ? "" : ":" + metadata)));
+        if (oreUBifier.replaces(block, metadata)) {
+          event.entityPlayer.addChatComponentMessage(new ChatComponentText("OreUBifier says it's to be replaced"));
+          Chunk chunk = event.world.getChunkFromBlockCoords(event.x, event.z);
+          int par_x = chunk.xPosition * 16;
+          int par_z = chunk.zPosition * 16;
+          int x = event.x;
+          int z = event.z;
+
+          DimensionManager dimManager = (DimensionManager) UBAPIHook.ubAPIHook.ubSetProviderRegistry;
+          WorldGenManager worldGen = dimManager.worldGenManager(0);
+          BiomeGenUndergroundBase[] undergroundBiomesForGeneration = new BiomeGenUndergroundBase[256];
+          undergroundBiomesForGeneration = worldGen.loadUndergroundBlockGeneratorData(undergroundBiomesForGeneration, par_x, par_z, 16, 16);
+          BiomeGenUndergroundBase currentBiome = undergroundBiomesForGeneration[(x - par_x) + (z - par_z) * 16];
+          int variation = (int) (currentBiome.strataNoise.noise(x / 55.533, z / 55.533, 3, 1, 0.5) * 10 - 5);
+          UBStoneCodes defaultColumnStone = currentBiome.fillerBlockCodes;
+          UBStoneCodes baseStrata = currentBiome.getStrataBlockAtLayer(event.y + variation);
+          BlockState replacement = oreUBifier.replacement(block, metadata, baseStrata, defaultColumnStone);
+          event.entityPlayer.addChatComponentMessage(new ChatComponentText("Replacement is " + new ItemStack(replacement.block, 1, replacement.metadata).getDisplayName() + (replacement.metadata == 0 ? "" : ":" + replacement.metadata)));
+        } else {
+          event.entityPlayer.addChatComponentMessage(new ChatComponentText("OreUBifier says it isn't replaced"));
+        }
+      }
+      else if (event.action.equals(PlayerInteractEvent.Action.RIGHT_CLICK_BLOCK) && Items.arrow.equals(event.entityPlayer.inventory.getCurrentItem().getItem())) {
+        ChunkRef ref = ChunkRef.getIfExists(event.x >> 4, event.z >> 4);
+        event.entityPlayer.addChatComponentMessage(new ChatComponentText((ref == null ? "No chunkref for (" + (event.x >> 4) + ", " + (event.z >> 4) + ")" : ref.toFullString())));
+      }
+    } catch (NullPointerException npe) {
+      //nope
     }
   }
 }

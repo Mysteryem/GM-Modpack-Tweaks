@@ -17,22 +17,26 @@ import net.minecraftforge.oredict.OreDictionary;
  */
 public class CaveBiomes extends Tweak{
   public CaveBiomes() {
-    this.MODID = "CaveBiomes";
+    super("CaveBiomes");
   }
   
   @Override
   public void postInit(FMLPostInitializationEvent event) {
     if (!this.isModLoaded()) return;
-    Block sedimentarySand = GameRegistry.findBlock("CaveBiomes", "sedimentarySand");
-    Block mossyIgneousStone = GameRegistry.findBlock("CaveBiomes", "mossy_igneous_stone");
-    Block mossyMetamorphicStone = GameRegistry.findBlock("CaveBiomes", "mossy_metamorphic_stone");
-    Block mossySedimentaryStone = GameRegistry.findBlock("CaveBiomes", "mossy_sedimentary_stone");
+    Block sedimentarySand = GameRegistry.findBlock(MODID, "sedimentarySand");
+    Block mossyIgneousStone = GameRegistry.findBlock(MODID, "mossy_igneous_stone");
+    Block mossyMetamorphicStone = GameRegistry.findBlock(MODID, "mossy_metamorphic_stone");
+    Block mossySedimentaryStone = GameRegistry.findBlock(MODID, "mossy_sedimentary_stone");
+    Block mossyIgneousCobbleStone = GameRegistry.findBlock(MODID, "mossy_igneous_cobblestone");
+    Block mossyMetamorphicCobbleStone = GameRegistry.findBlock(MODID, "mossy_metamorphic_cobblestone");
     
     for (int i = 0; i < 8; i++) {
       OreDictionary.registerOre("sand", new ItemStack(sedimentarySand, 1, i));
       OreDictionary.registerOre("stoneMossy", new ItemStack(mossyIgneousStone, 1, i));
       OreDictionary.registerOre("stoneMossy", new ItemStack(mossyMetamorphicStone, 1, i));
       OreDictionary.registerOre("stoneMossy", new ItemStack(mossySedimentaryStone, 1, i));
+      OreDictionary.registerOre("stoneMossy", new ItemStack(mossyIgneousCobbleStone, 1, i));
+      OreDictionary.registerOre("stoneMossy", new ItemStack(mossyMetamorphicCobbleStone, 1, i));
     }
   }
 }

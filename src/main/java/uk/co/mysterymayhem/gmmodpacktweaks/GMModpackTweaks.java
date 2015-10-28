@@ -7,6 +7,7 @@ import cpw.mods.fml.common.event.FMLPostInitializationEvent;
 import cpw.mods.fml.common.event.FMLPreInitializationEvent;
 import java.util.HashSet;
 import uk.co.mysterymayhem.gmmodpacktweaks.tweaks.CaveBiomes;
+import uk.co.mysterymayhem.gmmodpacktweaks.tweaks.ExtraUtilities;
 import uk.co.mysterymayhem.gmmodpacktweaks.tweaks.FossilsAndArcheology;
 import uk.co.mysterymayhem.gmmodpacktweaks.tweaks.GalacticraftMorePlanets;
 import uk.co.mysterymayhem.gmmodpacktweaks.tweaks.JaffasAndMore;
@@ -20,7 +21,7 @@ import uk.co.mysterymayhem.gmmodpacktweaks.tweaks.undergroundbiomesconstructs.Un
 public class GMModpackTweaks
 {
     public static final String MODID = "gmpacktweaks";
-    public static final String VERSION = "1.5";
+    public static final String VERSION = "1.7";
     public static final String MODNAME ="GM Modpack Tweaks";
     
     private static final HashSet<Tweak> tweaks = new HashSet<>();
@@ -44,7 +45,8 @@ public class GMModpackTweaks
             + ";before:RotaryCraft"
             + ";before:UndergroundBiomes"
             + ";after:fossil"
-            + ";required-after:CoFHCore";
+            + ";required-after:CoFHCore"
+            + ";after:ExtraUtilities";
 
     
     
@@ -66,6 +68,7 @@ public class GMModpackTweaks
       tweaks.add(new UBCOres());
       tweaks.add(new UndergroundBiomesConstructs());
       tweaks.add(new CaveBiomes());
+      tweaks.add(new ExtraUtilities());
     }
     
     @EventHandler

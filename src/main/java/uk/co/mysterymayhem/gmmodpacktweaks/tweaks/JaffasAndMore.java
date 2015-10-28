@@ -22,7 +22,7 @@ import static uk.co.mysterymayhem.gmmodpacktweaks.util.OreDict.regMany;
 public class JaffasAndMore extends Tweak{
 
   public JaffasAndMore() {
-    this.MODID = "Jaffas-Technic";
+    super("Jaffas-Technic");
   }
   
   

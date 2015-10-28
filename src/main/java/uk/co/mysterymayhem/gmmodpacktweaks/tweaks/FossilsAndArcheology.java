@@ -15,7 +15,7 @@ import uk.co.mysterymayhem.gmmodpacktweaks.util.OreDict;
 public class FossilsAndArcheology extends Tweak{
 
   public FossilsAndArcheology() {
-    this.MODID = "fossil";
+    super("fossil");
   }
 
   @Override

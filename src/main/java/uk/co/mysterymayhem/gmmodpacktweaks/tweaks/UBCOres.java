@@ -17,7 +17,7 @@ import uk.co.mysterymayhem.gmmodpacktweaks.util.OreDict;
 public class UBCOres extends Tweak{
 
   public UBCOres() {
-    this.MODID = "ubcores";
+    super("ubcores");
   }
   
   @Override
