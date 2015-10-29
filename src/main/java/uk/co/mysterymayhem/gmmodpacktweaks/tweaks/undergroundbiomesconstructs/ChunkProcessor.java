@@ -11,6 +11,7 @@ import exterminatorJeff.undergroundBiomes.api.UBStoneCodes;
 import exterminatorJeff.undergroundBiomes.common.DimensionManager;
 import exterminatorJeff.undergroundBiomes.common.WorldGenManager;
 import java.util.ArrayDeque;
+import java.util.ConcurrentModificationException;
 import java.util.HashMap;
 import java.util.Iterator;
 import net.minecraft.block.Block;
@@ -20,6 +21,7 @@ import net.minecraft.world.chunk.IChunkProvider;
 import net.minecraft.world.chunk.storage.AnvilChunkLoader;
 import net.minecraft.world.chunk.storage.IChunkLoader;
 import net.minecraft.world.gen.ChunkProviderServer;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import uk.co.mysterymayhem.gmmodpacktweaks.util.Log;
 
 /**
@@ -123,15 +125,26 @@ public class ChunkProcessor {
    */
   void postModOreGen(ChunkRef fullyGenned) {
 
-    // Go through all the chunks that need to be notified when this chunk is done generating
-    Iterator<ChunkCoordIntPair> iterator = fullyGenned.notifyOnPostPopulate.iterator();
-    while (iterator.hasNext()) {
-      ChunkCoordIntPair toNotifyPair = iterator.next();
-      ChunkRef toNotify = ChunkRef.get(toNotifyPair);
-      // After notifying a particular chunk that we've been populated, we can forget all about needing to notify that chunk
-      iterator.remove();
-      // Notify the chunk from our notify list that we've been populated
-      notify(toNotify, fullyGenned);
+    
+    /* Possible to cause a ConcurrentModificationException due to
+    	java.util.ConcurrentModificationException
+        at java.util.HashMap$HashIterator.nextNode(Unknown Source)
+        at java.util.HashMap$KeyIterator.next(Unknown Source)
+        at uk.co.mysterymayhem.gmmodpacktweaks.tweaks.undergroundbiomesconstructs.ChunkProcessor.replaceBlocksIfNotWaiting(ChunkProcessor.java:228)
+        at uk.co.mysterymayhem.gmmodpacktweaks.tweaks.undergroundbiomesconstructs.ChunkProcessor.onWorldTick(ChunkProcessor.java:351)
+    */
+    synchronized (fullyGenned.notifyOnPostPopulate) {
+      // Go through all the chunks that need to be notified when this chunk is done generating
+      Iterator<ChunkCoordIntPair> iterator = fullyGenned.notifyOnPostPopulate.iterator();
+      Log.debug("pMOG synchronized " + fullyGenned);
+      while (iterator.hasNext()) {
+        ChunkCoordIntPair toNotifyPair = iterator.next();
+        ChunkRef toNotify = ChunkRef.get(toNotifyPair);
+        // After notifying a particular chunk that we've been populated, we can forget all about needing to notify that chunk
+        iterator.remove();
+        // Notify the chunk from our notify list that we've been populated
+        notify(toNotify, fullyGenned);
+      }
     }
 
     // We want to see if the surrounding chunks have been populated, if so, we replace the blocks in this chunk
@@ -174,32 +187,41 @@ public class ChunkProcessor {
    * @param justBeenPopulated the chunk that has been populated
    */
   private void notify(ChunkRef toNotify, ChunkRef justBeenPopulated) {
-    // If chunk being notified is loaded
-    if (this.world.getChunkProvider().chunkExists(toNotify.x, toNotify.z)) {
-      
-      Log.debug(justBeenPopulated + " is notifying the loaded chunk " + toNotify);
-      Log.debug(toNotify + " wait list before: " + toNotify.waitingOn.toString());
-      
-      // Notify the chunk by telling it that it's not waiting for us any more
-      toNotify.waitingOn.remove(justBeenPopulated.toIntPair());
-
-      Log.debug(toNotify + " wait list after: " + toNotify.waitingOn.toString());
-
-      // Check if that means it can have its blocks replaced now and do so if it can
-      replaceBlocksIfNotWaiting(toNotify);
+    Log.debug(justBeenPopulated + " is notifying the loaded chunk " + toNotify);
+    Log.debug(toNotify + " wait list before: " + toNotify.waitingOn.toString());
+    
+    if (!toNotify.waitingOn.remove(justBeenPopulated.toIntPair())) {
+      toNotify.removeFromWaitingOnOnLoadAdd(justBeenPopulated.toIntPair());
     }
-    // It's not loaded, so the notification needs to happen when it gets loaded
-    // ADD it to the list instead
-    else {
-      Log.debug(justBeenPopulated + " is notifying the UNloaded chunk " + toNotify);
-      Log.debug(toNotify + " wait list before: " + toNotify.waitingOn.toString());
-      toNotify.waitingOn.add(justBeenPopulated.toIntPair());
-      Log.debug(toNotify + " wait list after: " + toNotify.waitingOn.toString());
-      
-      // The chunk's not loaded, so no need to call replaceBlocksIfNotWaiting(toNotify)
-      // It will get called when it loads if all the chunks it was waiting on
-      // generated while it was unloaded
-    }
+    Log.debug(toNotify + " wait list after: " + toNotify.waitingOn.toString());
+    
+    replaceBlocksIfNotWaiting(toNotify);
+//    // If chunk being notified is loaded
+//    if (this.world.getChunkProvider().chunkExists(toNotify.x, toNotify.z)) {
+//      
+//      Log.debug(justBeenPopulated + " is notifying the loaded chunk " + toNotify);
+//      Log.debug(toNotify + " wait list before: " + toNotify.waitingOn.toString());
+//      
+//      // Notify the chunk by telling it that it's not waiting for us any more
+//      toNotify.waitingOn.remove(justBeenPopulated.toIntPair());
+//
+//      Log.debug(toNotify + " wait list after: " + toNotify.waitingOn.toString());
+//
+//      // Check if that means it can have its blocks replaced now and do so if it can
+//      replaceBlocksIfNotWaiting(toNotify);
+//    }
+//    // It's not loaded, so the notification needs to happen when it gets loaded
+//    // ADD it to the list instead
+//    else {
+//      Log.debug(justBeenPopulated + " is notifying the UNloaded chunk " + toNotify);
+//      Log.debug(toNotify + " wait list before: " + toNotify.waitingOn.toString());
+//      toNotify.waitingOn.add(justBeenPopulated.toIntPair());
+//      Log.debug(toNotify + " wait list after: " + toNotify.waitingOn.toString());
+//      
+//      // The chunk's not loaded, so no need to call replaceBlocksIfNotWaiting(toNotify)
+//      // It will get called when it loads if all the chunks it was waiting on
+//      // generated while it was unloaded
+//    }
   }
 
   /**
@@ -214,10 +236,24 @@ public class ChunkProcessor {
     if (ref.waitingOn.isEmpty()) {
       //TODO: Fix the problem in postModOreGen when a chunk can have isTerrainPopulated = false, even when that chunk has been passed to postModOreGen beforehand. isTerrainPopulated sometimes set after postModOreGen? Need to investigate. 
       //TODO: NOPE, isTerrainPopulated is set to true _before_ vanilla population. Mod population then happens after that, with postModOreGen occuring as the last thing during mod population. I really don't know what's causing this, but it is fortunately recoverable. The more important question is whether or not the whole process can produce cycles (chunk a waiting on chunk b, which is waiting on chunk a) or forgotten chunks (chunk c has had its ores populated, is waiting on no chunks, but has not
-      for (ChunkCoordIntPair brokenNotifyPair : ref.notifyOnPostPopulate) {
-        ChunkRef brokenNotify = ChunkRef.get(brokenNotifyPair);
-        Log.error("Somehow " + brokenNotify + " made it into " + ref + "'s notify list late");
-        notify(brokenNotify, ref);
+      Log.error("late entries are in notify list of " + ref.toFullString());
+      /* Possible ConcurrentModificationException due to
+        java.util.ConcurrentModificationException: Locked
+          at uk.co.mysterymayhem.gmmodpacktweaks.tweaks.undergroundbiomesconstructs.LockableSet.checkLock(LockableSet.java:60)
+          at uk.co.mysterymayhem.gmmodpacktweaks.tweaks.undergroundbiomesconstructs.LockableSet$LockableSetIterator.remove(LockableSet.java:37)
+          at uk.co.mysterymayhem.gmmodpacktweaks.tweaks.undergroundbiomesconstructs.ChunkProcessor.postModOreGen(ChunkProcessor.java:133)
+          at uk.co.mysterymayhem.gmmodpacktweaks.tweaks.undergroundbiomesconstructs.UndergroundBiomesConstructs.postTerrainGenerate(UndergroundBiomesConstructs.java:451)
+      */
+      synchronized (ref.notifyOnPostPopulate) {
+        Log.debug("rBINW synchronized " + ref);
+        Iterator<ChunkCoordIntPair> iterator = ref.notifyOnPostPopulate.iterator();
+        while (iterator.hasNext()) {
+          ChunkCoordIntPair brokenNotifyPair = iterator.next();
+          ChunkRef brokenNotify = ChunkRef.get(brokenNotifyPair);
+          Log.error("Somehow " + brokenNotify + " made it into " + ref + "'s notify list late");
+          iterator.remove();
+          notify(brokenNotify, ref);
+        }
       }
       
       //DEBUG
@@ -227,8 +263,8 @@ public class ChunkProcessor {
       replaceBlocks(ref);
       // This reference is no longer going to be used, so remove it from the map
       ChunkRef.remove(ref);
-      //DEBUG
-      Log.log("Removed " + ref + " from tracked references");
+      
+      Log.debug("Removed " + ref + " from tracked references");
       //ref.notifyOnPostDecorate should be empty
     }
   }
@@ -251,8 +287,13 @@ public class ChunkProcessor {
    */
   private void replaceBlocks(int chunkX, int chunkZ) {
     //DEBUG
-    Log.log("Replacing blocks for (" + chunkX + ", " + chunkZ + ")");
-
+    Log.debug("Replacing blocks for (" + chunkX + ", " + chunkZ + ")");
+    ChunkRef ref = ChunkRef.get(chunkX, chunkZ);
+    if (ref.replacementComplete) {
+      Log.error("Already replaced blocks! Trace: " + ExceptionUtils.getStackTrace(new Throwable()));
+      return;
+    }
+    ref.replacementComplete = true;
     // Get world coordinates for (0,0) within the specified chunk
     int par_x = chunkX * 16;
     int par_z = chunkZ * 16;
@@ -321,7 +362,7 @@ public class ChunkProcessor {
         }
       }
     }
-    Log.log("Replaced blocks for (" + chunkX + ", " + chunkZ + ")");
+    Log.debug("Replaced blocks for (" + chunkX + ", " + chunkZ + ")");
   }
   
   @SubscribeEvent

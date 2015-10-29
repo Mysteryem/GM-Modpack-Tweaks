@@ -20,10 +20,8 @@ import net.minecraft.init.Blocks;
 import net.minecraftforge.common.MinecraftForge;
 import uk.co.mysterymayhem.gmmodpacktweaks.tweaks.Tweak;
 import uk.co.mysterymayhem.gmmodpacktweaks.util.OreDict;
-import static uk.co.mysterymayhem.gmmodpacktweaks.util.Log.log;
 import cofh.asmhooks.event.ModPopulateChunkEvent;
 import cpw.mods.fml.common.Loader;
-import cpw.mods.fml.common.gameevent.TickEvent;
 import cpw.mods.fml.relauncher.ReflectionHelper;
 import exterminatorJeff.undergroundBiomes.api.BiomeGenUndergroundBase;
 import exterminatorJeff.undergroundBiomes.api.UBAPIHook;
@@ -32,19 +30,10 @@ import exterminatorJeff.undergroundBiomes.common.WorldGenManager;
 import exterminatorJeff.undergroundBiomes.common.block.BlockOverlay;
 import exterminatorJeff.undergroundBiomes.common.block.BlockUBHidden;
 import exterminatorJeff.undergroundBiomes.common.item.ItemUBHiddenBlock;
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.PrintWriter;
 import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.ListIterator;
+import java.util.Arrays;
 import java.util.Objects;
 import java.util.logging.Level;
-import java.util.regex.Pattern;
 import net.minecraft.block.BlockSilverfish;
 import net.minecraft.entity.monster.EntitySilverfish;
 import net.minecraft.util.MathHelper;
@@ -53,22 +42,17 @@ import java.util.concurrent.ThreadLocalRandom;
 import net.minecraft.util.Facing;
 import net.minecraftforge.event.entity.living.LivingEvent;
 import java.util.function.Function;
-import micdoodle8.mods.galacticraft.core.dimension.OrbitSpinSaveData;
 import net.minecraft.init.Items;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.ChatComponentText;
 import net.minecraft.world.WorldSavedData;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.IChunkProvider;
-import net.minecraft.world.gen.ChunkProviderServer;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.event.terraingen.PopulateChunkEvent;
 import net.minecraftforge.event.world.ChunkDataEvent;
-import net.minecraftforge.event.world.ChunkEvent;
 import uk.co.mysterymayhem.gmmodpacktweaks.util.Log;
-import org.apache.commons.lang3.exception.ExceptionUtils;
 
 /**
  * Mod tweaks for Underground Biomes Constructs.
@@ -421,7 +405,7 @@ public class UndergroundBiomesConstructs extends Tweak {
       }
 
     } catch (NoSuchFieldException | SecurityException | IllegalArgumentException | IllegalAccessException ex) {
-      uk.co.mysterymayhem.gmmodpacktweaks.util.Log.log("Failed to get UBC OreUBifier");
+      Log.error("Failed to get UBC OreUBifier");
     }
 
   }
@@ -449,8 +433,7 @@ public class UndergroundBiomesConstructs extends Tweak {
       //cProcessor.replaceBlocks(ChunkRef.get(event.chunkX, event.chunkZ));
       cProcessor.postModOreGen(chunkRef);
       
-      //DEBUG
-      log("Finished postModOreGen for " + chunkRef);
+      Log.debug("Finished postModOreGen for " + chunkRef);
     }
   }
 
@@ -461,7 +444,7 @@ public class UndergroundBiomesConstructs extends Tweak {
   @SubscribeEvent(priority = EventPriority.LOWEST)
   public void onWorldUnload(WorldEvent.Unload event) {
     if (!event.world.isRemote && event.world.provider.dimensionId == 0) {
-      log("World unloading, saving all nbt data");
+      Log.debug("World unloading, saving all nbt data");
       
       ChunkRef.validateAll();
       ChunkRef.cyclicCheck();
@@ -470,12 +453,13 @@ public class UndergroundBiomesConstructs extends Tweak {
       
       ArrayList<ChunkRef> refsOfNonExistantChunks = new ArrayList<>();
       
+      //TODO: The loading of chunks should not be needed now as the data is always saved to chunks when they have their data saved
       //For the remaining stored references to chunks that actually exist, we should be able to load the chunks so that when they unload, their data gets saved to their nbt. For chunks that we have reference to, but don't exist yet, we need to store the data separately, either flatfile or WorldSavedData or whatever it was
       IChunkProvider chunkProvider = event.world.getChunkProvider();
       for (ChunkRef ref : allRefs) {
         if (chunkProvider.chunkExists(ref.x, ref.z)) {
           //same as doing event.world.getChunkFromChunkCoords(ref.x, ref.z);
-          chunkProvider.provideChunk(ref.x, ref.z);
+          //chunkProvider.provideChunk(ref.x, ref.z);
         } else {
           refsOfNonExistantChunks.add(ref);
         }
@@ -485,7 +469,7 @@ public class UndergroundBiomesConstructs extends Tweak {
       ophanedChunkRefData.setData(refsOfNonExistantChunks);
       event.world.perWorldStorage.setData(OphanedChunkRefData.UNIQUE_IDENTIFIER, ophanedChunkRefData);
       event.world.perWorldStorage.saveAllData();
-      log("All nbt data saved");
+      Log.debug("All nbt data saved");
       
 //      try (PrintWriter output = new PrintWriter(new BufferedWriter(new FileWriter(event.world.getSaveHandler().getWorldDirectory().getAbsolutePath() + File.separator + SAVE_NAME)));) {
 //
@@ -573,10 +557,10 @@ public class UndergroundBiomesConstructs extends Tweak {
   @SubscribeEvent(priority = EventPriority.NORMAL)
   public void onWorldLoad(WorldEvent.Load event) {
     if (!event.world.isRemote && event.world.provider.dimensionId == 0) {
-      Log.log("Loading world");
+      Log.debug("Loading world");
       WorldSavedData loadedData = event.world.perWorldStorage.loadData(OphanedChunkRefData.class, OphanedChunkRefData.UNIQUE_IDENTIFIER);
       if (loadedData == null) {
-        Log.log("No data loaded from world");
+        Log.debug("No data loaded from world");
       }
 //      log("Beginning load from file attempt");
 //      try (BufferedReader input = new BufferedReader(new FileReader(event.world.getSaveHandler().getWorldDirectory().getAbsolutePath() + File.separator + SAVE_NAME));) {
@@ -659,14 +643,26 @@ public class UndergroundBiomesConstructs extends Tweak {
         // Chunk is yet to have its blocks replaced so we need to track this chunk still
         // get/create a ChunkRef
         ChunkRef ref = ChunkRef.get(event.getChunk());
-        // Load the data from the chunk into the ref
-        ref.loadFromChunkData(data, event.world);
+        
+        if (!ref.removeFromWaitingOnOnLoadIsEmpty()) {
+          ref = ChunkRef.get(event.getChunk());
+          // Load the data from the chunk into the ref
+          ref.loadFromChunkData(data, event.world);
+          Log.debug("Loaded UBC nbt into " + ref);
+        }
         
         //DEBUG
         Log.debug("Loaded " + ref + " from NBT");
+        // Replace on next tick to avoid chunks that haven't fully loaded
+        // Additional check as it's possible for us to decide that we want to replace the blocks of a loaded chunk,
+        // the chunk then unloads before any replacement occurs causing it to be reloaded when replacement starts, which causes this method to run
+        if (!ref.replacementComplete) {
+          ChunkProcessor.get(event.world).replaceBlocksIfNotWaitingNextTick(ref);
+        }
       }
       else {
-        Log.debug("Loaded (" + event.getChunk().xPosition + ", " + event.getChunk().zPosition + "), with no extra nbt data: " + event.getData());
+        Log.debug("Loaded (" + event.getChunk().xPosition + ", "
+                + event.getChunk().zPosition + "), with no extra nbt data: " + getUBCDataFromFullNBT(event.getData()));
       }
     }
   }
@@ -685,10 +681,20 @@ public class UndergroundBiomesConstructs extends Tweak {
         //Log.debug(ExceptionUtils.getStackTrace(new Throwable()));
       }
       else {
-        Log.debug("Chunk (" + chunk.xPosition + ", " + chunk.zPosition + ") was saved to file without UBC NBT: " + event.getData());
+        Log.debug("Chunk (" + chunk.xPosition + ", " + chunk.zPosition 
+                + ") was saved to file without UBC NBT: " + getUBCDataFromFullNBT(event.getData()));
         //Log.debug(ExceptionUtils.getStackTrace(new Throwable()));
       }
     }
+  }
+  
+  static String getUBCDataFromFullNBT(NBTTagCompound nbt) {
+    StringBuilder builder = new StringBuilder();
+    builder.append(ChunkRef.WAITING_ON_KEY).append(":")
+            .append(Arrays.toString(nbt.getIntArray(ChunkRef.WAITING_ON_KEY)))
+            .append(",").append(ChunkRef.NOTIFY_KEY).append(":")
+            .append(nbt.getIntArray(ChunkRef.NOTIFY_KEY));
+    return builder.toString();
   }
   
 //  @SubscribeEvent

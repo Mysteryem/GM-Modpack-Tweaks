@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Set;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.world.ChunkCoordIntPair;
 import net.minecraft.world.World;
@@ -26,7 +27,6 @@ public class ChunkRef {
   private static final HashMap<Integer, HashMap<Integer, ChunkRef>> allRefs = new HashMap<>();
   
   private static final HashSet<ChunkRef> currentlyGenerating = new HashSet<>();
-  private static final HashSet<ChunkRef> currentlyUnloading = new HashSet<>();
 
   /**
    * Get a ChunkRef, creating a new one if it doesn't yet exist.
@@ -193,7 +193,8 @@ public class ChunkRef {
   public final int z;
   final HashSet<ChunkCoordIntPair> waitingOn = new HashSet<>();
   final HashSet<ChunkCoordIntPair> notifyOnPostPopulate = new HashSet<>();
-  //private final ChunkCoordIntPair
+  private HashSet<ChunkCoordIntPair> removeFromWaitingOnOnLoad = null;
+  boolean replacementComplete = false;
 
   private ChunkRef(int chunkX, int chunkZ) {
     this.x = chunkX;
@@ -206,6 +207,27 @@ public class ChunkRef {
 
   private ChunkRef(Chunk chunk) {
     this(chunk.xPosition, chunk.zPosition);
+  }
+  
+  public void removeFromWaitingOnOnLoadAdd(ChunkCoordIntPair pair) {
+    if (this.removeFromWaitingOnOnLoad == null) {
+      this.removeFromWaitingOnOnLoad = new HashSet<>();
+    }
+    this.removeFromWaitingOnOnLoad.add(pair);
+  }
+  
+  public void removeFromWaitingOnOnLoadClear() {
+    this.removeFromWaitingOnOnLoad = null;
+  }
+  
+  public void removeFromWaitingOnOnLoadRemoveAllFrom(Collection<ChunkCoordIntPair> col) {
+    if (this.removeFromWaitingOnOnLoad != null) {
+      col.removeAll(this.removeFromWaitingOnOnLoad);
+    }
+  }
+  
+  public boolean removeFromWaitingOnOnLoadIsEmpty() {
+    return this.removeFromWaitingOnOnLoad == null || this.removeFromWaitingOnOnLoad.isEmpty();
   }
 
   @Override
@@ -243,13 +265,17 @@ public class ChunkRef {
   public String toFullString() {
     StringBuilder builder = new StringBuilder();
     builder.append(this).append("waiting on: ");
-    for (ChunkCoordIntPair ref : this.waitingOn) {
-      builder.append(ref).append(", ");
-    }
+    builder.append(this.waitingOn);
+//    for (ChunkCoordIntPair ref : this.waitingOn) {
+//      builder.append(ref).append(", ");
+//    }
     builder.append("to notify: ");
-    for (ChunkCoordIntPair ref : this.notifyOnPostPopulate) {
-      builder.append(ref).append(", ");
-    }
+    builder.append(this.notifyOnPostPopulate);
+    builder.append("removeFromWaitingOnOnLoad: ");
+    builder.append(this.removeFromWaitingOnOnLoad);
+//    for (ChunkCoordIntPair ref : this.notifyOnPostPopulate) {
+//      builder.append(ref).append(", ");
+//    }
     return builder.toString();
   }
 
@@ -367,10 +393,11 @@ public class ChunkRef {
     else {
       nbt.removeTag(WAITING_ON_KEY);
     }
+    Log.debug("Saved to " + this + ": " + UndergroundBiomesConstructs.getUBCDataFromFullNBT(nbt));
        
-    ChunkRef.remove(this);
+//    ChunkRef.remove(this);
     //DEBUG
-    Log.log("Removed " + this + " as data is beign saved to chunk " + nbt);
+    //Log.debug("Removed " + this + " as data is beign saved to chunk " + nbt);
   }
   
   public void loadFromChunkData(NBTTagCompound nbt, World world) {
@@ -383,7 +410,6 @@ public class ChunkRef {
       }
     }
     
-    HashSet<ChunkRef> waitingCopy = (HashSet<ChunkRef>)this.waitingOn.clone();
        
     int[] waitingList = nbt.getIntArray(WAITING_ON_KEY);
     if (waitingList != null) {
@@ -391,10 +417,9 @@ public class ChunkRef {
         this.waitingOn.add(ChunkRef.get(waitingList[i], waitingList[i + 1]).toIntPair());
       }
     }
-    this.waitingOn.removeAll(waitingCopy);
-    // Replace on next tick to avoid chunks that haven't fully loaded
-    ChunkProcessor.get(world).replaceBlocksIfNotWaitingNextTick(this);
-    Log.debug("Loaded " + this + " from nbt " + nbt);
+    this.removeFromWaitingOnOnLoadRemoveAllFrom(waitingOn);
+    this.removeFromWaitingOnOnLoadClear();
+    Log.debug("Loaded " + this + " from nbt " + UndergroundBiomesConstructs.getUBCDataFromFullNBT(nbt));
     Log.debug("WaitingOn list is now " + this.waitingOn);
   }
   
