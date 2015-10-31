@@ -33,6 +33,8 @@ public class ChunkProcessor {
   // Map containing all the ChunkProcessors by World
   private static final HashMap<World, ChunkProcessor> processors = new HashMap<>();
   private final ArrayDeque<ChunkRef> tryReplaceNextTickList = new ArrayDeque<>();
+  // Determines the radius of chunks we wait to have their ores placed before replacing the blocks in this chunk
+  public static final int SCAN_RADIUS = 3;
 
   /**
    * Gets a ChunkProcessor from an internal map, creating a new one if one
@@ -148,8 +150,8 @@ public class ChunkProcessor {
     }
 
     // We want to see if the surrounding chunks have been populated, if so, we replace the blocks in this chunk
-    for (int xOffset = -1; xOffset <= 1; xOffset++) {
-      for (int zOffset = -1; zOffset <= 1; zOffset++) {
+    for (int xOffset = -SCAN_RADIUS; xOffset <= SCAN_RADIUS; xOffset++) {
+      for (int zOffset = -SCAN_RADIUS; zOffset <= SCAN_RADIUS; zOffset++) {
         if (xOffset == 0 && zOffset == 0) {
           continue;
         }
@@ -236,7 +238,6 @@ public class ChunkProcessor {
     if (ref.waitingOn.isEmpty()) {
       //TODO: Fix the problem in postModOreGen when a chunk can have isTerrainPopulated = false, even when that chunk has been passed to postModOreGen beforehand. isTerrainPopulated sometimes set after postModOreGen? Need to investigate. 
       //TODO: NOPE, isTerrainPopulated is set to true _before_ vanilla population. Mod population then happens after that, with postModOreGen occuring as the last thing during mod population. I really don't know what's causing this, but it is fortunately recoverable. The more important question is whether or not the whole process can produce cycles (chunk a waiting on chunk b, which is waiting on chunk a) or forgotten chunks (chunk c has had its ores populated, is waiting on no chunks, but has not
-      Log.error("late entries are in notify list of " + ref.toFullString());
       /* Possible ConcurrentModificationException due to
         java.util.ConcurrentModificationException: Locked
           at uk.co.mysterymayhem.gmmodpacktweaks.tweaks.undergroundbiomesconstructs.LockableSet.checkLock(LockableSet.java:60)
@@ -247,19 +248,23 @@ public class ChunkProcessor {
       synchronized (ref.notifyOnPostPopulate) {
         Log.debug("rBINW synchronized " + ref);
         Iterator<ChunkCoordIntPair> iterator = ref.notifyOnPostPopulate.iterator();
-        while (iterator.hasNext()) {
-          ChunkCoordIntPair brokenNotifyPair = iterator.next();
-          ChunkRef brokenNotify = ChunkRef.get(brokenNotifyPair);
-          Log.error("Somehow " + brokenNotify + " made it into " + ref + "'s notify list late");
-          iterator.remove();
-          notify(brokenNotify, ref);
+        if (iterator.hasNext()) {
+          Log.debug("late entries are in notify list of " + ref.toFullString());
+          while (iterator.hasNext()) {
+            ChunkCoordIntPair brokenNotifyPair = iterator.next();
+            ChunkRef brokenNotify = ChunkRef.get(brokenNotifyPair);
+            Log.debug("Somehow " + brokenNotify + " made it into " + ref + "'s notify list late");
+            iterator.remove();
+            notify(brokenNotify, ref);
+          }
         }
+        
       }
       
       //DEBUG
       //Log.log("Replacing blocks for " + ref);
       
-      // We are free to replace the block in this chunk now
+      // We are free to replace the blocks in this chunk now
       replaceBlocks(ref);
       // This reference is no longer going to be used, so remove it from the map
       ChunkRef.remove(ref);

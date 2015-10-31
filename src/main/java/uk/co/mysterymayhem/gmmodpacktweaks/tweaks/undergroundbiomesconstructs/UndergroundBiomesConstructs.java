@@ -34,6 +34,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.logging.Level;
+import java.util.PriorityQueue;
 import net.minecraft.block.BlockSilverfish;
 import net.minecraft.entity.monster.EntitySilverfish;
 import net.minecraft.util.MathHelper;
@@ -798,6 +799,7 @@ public class UndergroundBiomesConstructs extends Tweak {
   
   @SubscribeEvent(priority = EventPriority.LOWEST)
   public void interactWithBlock(PlayerInteractEvent event) {
+    if (!Log.DEBUGGING_ACTIVE) {return;}
     try {
       if (event.action.equals(PlayerInteractEvent.Action.RIGHT_CLICK_BLOCK) && Items.stick.equals(event.entityPlayer.inventory.getCurrentItem().getItem())) {
         int metadata = event.world.getBlockMetadata(event.x, event.y, event.z);
